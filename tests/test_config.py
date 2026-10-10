@@ -81,3 +81,13 @@ def test_tool_routing_env(monkeypatch: pytest.MonkeyPatch) -> None:
     config = load_config()
     assert config.require_tool_support is False
     assert config.validate_tool_calls is False
+
+
+def test_stealth_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEWHIRR_PROMOTE_STEALTH", "true")
+    monkeypatch.setenv("FREEWHIRR_ALERT_WEBHOOK", "https://example.test/hook")
+    monkeypatch.setenv("FREEWHIRR_WATCH_INTERVAL", "15")
+    config = load_config()
+    assert config.promote_stealth is True
+    assert config.alert_webhook == "https://example.test/hook"
+    assert config.watch_interval == 15.0

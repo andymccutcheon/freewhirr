@@ -14,6 +14,13 @@ from freewhirr.config import FreewhirrConfig, discover_config_path, load_config
 from freewhirr.errors import FreewhirrError
 from freewhirr.router import Freewhirr
 from freewhirr.stats import collect_stats
+from freewhirr.stealth import (
+    build_watch_report,
+    diff_and_score,
+    format_report_lines,
+    post_webhook,
+    sleep_interval,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -49,6 +56,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub.add_parser("stats", help="Show free vs paid share and estimated savings.")
     models = sub.add_parser("models", help="List the free models the router would try.")
     models.add_argument("--refresh", action="store_true", help="Bypass the catalog cache.")
+    models.add_argument(
+        "--new",
+        action="store_true",
+        dest="only_new",
+        help="Show $0 models first seen since the last catalog snapshot.",
+    )
+    models.add_argument(
+        "--stealth",
+        action="store_true",
+        dest="only_stealth",
+        help="Show models that look like stealth/cloaked drops.",
+    )
+    watch = sub.add_parser("watch", help="Poll OpenRouter for new and stealth free models.")
+    watch.add_argument(
+        "--interval",
+        type=float,
+        default=None,
+        help="Seconds between polls (FREEWHIRR_WATCH_INTERVAL / watch_interval).",
+    )
+    watch.add_argument(
+        "--once",
+        action="store_true",
+        help="Scan once and exit (useful for tests and cron).",
+    )
     sub.add_parser("config", help="Print the resolved configuration (secrets redacted).")
 
     args = parser.parse_args(argv)
@@ -61,6 +92,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_stats(args)
         if args.command == "models":
             return _cmd_models(args)
+        if args.command == "watch":
+            return _cmd_watch(args)
         if args.command == "config":
             return _cmd_config(args)
     except FreewhirrError as exc:
@@ -128,6 +161,16 @@ def _cmd_stats(args: argparse.Namespace) -> int:
 def _cmd_models(args: argparse.Namespace) -> int:
     client = _load(args)
     try:
+        if args.only_new or args.only_stealth:
+            _new_ids, reports = diff_and_score(client)
+            selected = reports
+            if args.only_new:
+                selected = [item for item in selected if item.is_new]
+            if args.only_stealth:
+                selected = [item for item in selected if item.is_stealth]
+            for line in format_report_lines(selected):
+                print(line)
+            return 0
         if args.refresh:
             client.refresh_models(force=True)
         for model_id in client.list_free_models():
@@ -137,6 +180,32 @@ def _cmd_models(args: argparse.Namespace) -> int:
             for model_id in client.config.paid_models:
                 print(model_id)
         return 0
+    finally:
+        client.close()
+
+
+def _cmd_watch(args: argparse.Namespace) -> int:
+    client = _load(args)
+    interval = args.interval if args.interval is not None else client.config.watch_interval
+    webhook = client.config.alert_webhook
+    try:
+        while True:
+            _new_ids, reports = diff_and_score(client)
+            report = build_watch_report(reports)
+            print(
+                f"watch: scanned={report.scanned} new={len(report.new)} "
+                f"stealth={len(report.stealth)} excluded={len(report.excluded)}"
+            )
+            for line in format_report_lines([*report.new, *report.stealth]):
+                print(line)
+            if webhook:
+                try:
+                    post_webhook(webhook, report)
+                except Exception as exc:  # webhook must not kill the poller
+                    print(f"freewhirr: webhook failed: {exc}", file=sys.stderr)
+            if args.once:
+                return 0
+            sleep_interval(interval)
     finally:
         client.close()
 

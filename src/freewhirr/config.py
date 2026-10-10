@@ -56,6 +56,11 @@ class FreewhirrConfig(BaseModel):
     fetch_generation_cost: bool = False
     require_tool_support: bool = True
     validate_tool_calls: bool = True
+    promote_stealth: bool = False
+    watch_interval: float = 300.0
+    alert_webhook: str | None = None
+    stealth_threshold: int = 2
+    stealth_new_hours: float = 168.0
     app_url: str = DEFAULT_APP_URL
     app_title: str = DEFAULT_APP_TITLE
     log_level: str = "INFO"
@@ -221,6 +226,16 @@ def env_overrides() -> dict[str, Any]:
         mapping["require_tool_support"] = _parse_bool(os.environ["FREEWHIRR_REQUIRE_TOOL_SUPPORT"])
     if os.environ.get("FREEWHIRR_VALIDATE_TOOL_CALLS"):
         mapping["validate_tool_calls"] = _parse_bool(os.environ["FREEWHIRR_VALIDATE_TOOL_CALLS"])
+    if os.environ.get("FREEWHIRR_PROMOTE_STEALTH"):
+        mapping["promote_stealth"] = _parse_bool(os.environ["FREEWHIRR_PROMOTE_STEALTH"])
+    if os.environ.get("FREEWHIRR_WATCH_INTERVAL"):
+        mapping["watch_interval"] = float(os.environ["FREEWHIRR_WATCH_INTERVAL"])
+    if os.environ.get("FREEWHIRR_ALERT_WEBHOOK"):
+        mapping["alert_webhook"] = os.environ["FREEWHIRR_ALERT_WEBHOOK"]
+    if os.environ.get("FREEWHIRR_STEALTH_THRESHOLD"):
+        mapping["stealth_threshold"] = int(os.environ["FREEWHIRR_STEALTH_THRESHOLD"])
+    if os.environ.get("FREEWHIRR_STEALTH_NEW_HOURS"):
+        mapping["stealth_new_hours"] = float(os.environ["FREEWHIRR_STEALTH_NEW_HOURS"])
     if os.environ.get("FREEWHIRR_APP_URL"):
         mapping["app_url"] = os.environ["FREEWHIRR_APP_URL"]
     if os.environ.get("FREEWHIRR_APP_TITLE"):

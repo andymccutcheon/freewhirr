@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from freewhirr.types import Outcome
+from freewhirr.types import ModelInfo, Outcome
 
 
 def _utcnow() -> datetime:
@@ -57,6 +57,17 @@ class StateStore:
     def events(self) -> list[dict[str, Any]]:
         raise NotImplementedError
 
+    def remember_catalog(
+        self,
+        models: list[ModelInfo],
+        *,
+        now: datetime | None = None,
+    ) -> list[str]:
+        raise NotImplementedError
+
+    def catalog_seen(self) -> dict[str, dict[str, Any]]:
+        raise NotImplementedError
+
     def close(self) -> None:
         return None
 
@@ -93,6 +104,17 @@ class SQLiteStore(StateStore):
             )
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)"
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS catalog_seen (
+                    model_id TEXT PRIMARY KEY,
+                    first_seen TEXT NOT NULL,
+                    last_seen TEXT NOT NULL,
+                    is_free INTEGER NOT NULL DEFAULT 0,
+                    name TEXT
+                )
+                """
             )
 
     def record_event(
@@ -180,6 +202,55 @@ class SQLiteStore(StateStore):
             result.append(item)
         return result
 
+    def remember_catalog(
+        self,
+        models: list[ModelInfo],
+        *,
+        now: datetime | None = None,
+    ) -> list[str]:
+        stamp = (now or _utcnow()).isoformat()
+        new_ids: list[str] = []
+        with self._lock, self._conn:
+            for info in models:
+                if not info.id:
+                    continue
+                row = self._conn.execute(
+                    "SELECT model_id FROM catalog_seen WHERE model_id = ?",
+                    (info.id,),
+                ).fetchone()
+                if row is None:
+                    new_ids.append(info.id)
+                    self._conn.execute(
+                        """
+                        INSERT INTO catalog_seen (model_id, first_seen, last_seen, is_free, name)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (info.id, stamp, stamp, 1 if info.is_free else 0, info.name),
+                    )
+                else:
+                    self._conn.execute(
+                        """
+                        UPDATE catalog_seen
+                        SET last_seen = ?, is_free = ?, name = ?
+                        WHERE model_id = ?
+                        """,
+                        (stamp, 1 if info.is_free else 0, info.name, info.id),
+                    )
+        return new_ids
+
+    def catalog_seen(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM catalog_seen").fetchall()
+        return {
+            row["model_id"]: {
+                "first_seen": row["first_seen"],
+                "last_seen": row["last_seen"],
+                "is_free": bool(row["is_free"]),
+                "name": row["name"],
+            }
+            for row in rows
+        }
+
     def close(self) -> None:
         with self._lock:
             self._conn.close()
@@ -191,15 +262,16 @@ class JSONStore(StateStore):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         if not self.path.exists():
-            self._write({"events": []})
+            self._write({"events": [], "catalog_seen": {}})
 
     def _read(self) -> dict[str, Any]:
         if not self.path.exists():
-            return {"events": []}
+            return {"events": [], "catalog_seen": {}}
         loaded = json.loads(self.path.read_text(encoding="utf-8") or "{}")
         if not isinstance(loaded, dict):
-            return {"events": []}
+            return {"events": [], "catalog_seen": {}}
         loaded.setdefault("events", [])
+        loaded.setdefault("catalog_seen", {})
         return loaded
 
     def _write(self, data: dict[str, Any]) -> None:
@@ -238,6 +310,7 @@ class JSONStore(StateStore):
         }
         with self._lock:
             data = self._read()
+            data.setdefault("catalog_seen", {})
             data["events"].append(event)
             self._write(data)
 
@@ -272,6 +345,41 @@ class JSONStore(StateStore):
     def events(self) -> list[dict[str, Any]]:
         with self._lock:
             return list(self._read()["events"])
+
+    def remember_catalog(
+        self,
+        models: list[ModelInfo],
+        *,
+        now: datetime | None = None,
+    ) -> list[str]:
+        stamp = (now or _utcnow()).isoformat()
+        new_ids: list[str] = []
+        with self._lock:
+            data = self._read()
+            seen = data.setdefault("catalog_seen", {})
+            for info in models:
+                if not info.id:
+                    continue
+                existing = seen.get(info.id)
+                if existing is None:
+                    new_ids.append(info.id)
+                    seen[info.id] = {
+                        "first_seen": stamp,
+                        "last_seen": stamp,
+                        "is_free": info.is_free,
+                        "name": info.name,
+                    }
+                else:
+                    existing["last_seen"] = stamp
+                    existing["is_free"] = info.is_free
+                    existing["name"] = info.name
+            self._write(data)
+        return new_ids
+
+    def catalog_seen(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            raw = self._read().get("catalog_seen") or {}
+        return {key: dict(value) for key, value in raw.items() if isinstance(value, dict)}
 
 
 def open_store(path: Path, backend: str) -> StateStore:
