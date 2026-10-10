@@ -604,7 +604,10 @@ Environment variable or a gitignored local config file. Never commit it.
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Short version:
+See [CONTRIBUTING.md](https://github.com/andymccutcheon/freewhirr/blob/main/CONTRIBUTING.md).
+Releases use PyPI Trusted Publishing; see
+[RELEASING.md](https://github.com/andymccutcheon/freewhirr/blob/main/RELEASING.md).
+Short version:
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -614,4 +617,4 @@ pytest
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/andymccutcheon/freewhirr/blob/main/LICENSE).

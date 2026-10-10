@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from freewhirr._version import __version__
 from freewhirr.anthropic import (
     anthropic_to_openai,
     aopenai_chunks_to_anthropic_sse,
@@ -42,7 +43,7 @@ def create_app(client: Freewhirr | None = None) -> FastAPI:
     app = FastAPI(
         title="freewhirr",
         description="Spend nothing until you choose to.",
-        version="0.1.0",
+        version=__version__,
     )
     app.state.client = client
     app.state.responses = ResponseMemory()
