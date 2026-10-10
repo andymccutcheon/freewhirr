@@ -1,0 +1,42 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Local state and secrets — never commit keys or spend ledgers
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+.freeloader/
+freeloader.local.yaml
+freeloader.local.yml
+freeloader.local.toml
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

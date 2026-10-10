@@ -1,0 +1,18 @@
+# Escalate to paid models only after free models are exhausted, and only
+# inside explicit dollar and share guardrails.
+exhaustion_policy: paid
+include_discovered_free: true
+free_models: []
+paid_models:
+  - openai/gpt-4o-mini
+  - google/gemini-2.0-flash-001
+max_paid_per_request: 0.05
+max_paid_per_day: 1.00
+max_paid_per_month: 10.00
+# Fraction of successful requests that may be paid (0.1 = 10%).
+max_paid_share: 0.1
+# When true, paid fallback runs only if the request is tagged high-complexity.
+paid_only_high_complexity: false
+deny_data_collection: false
+baseline_paid_model: openai/gpt-4o-mini
+state_backend: sqlite
