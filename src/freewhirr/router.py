@@ -30,6 +30,7 @@ from freewhirr.quality import (
     request_uses_tools,
 )
 from freewhirr.retry import backoff_delays, classify_failure
+from freewhirr.stealth import rotation_excluded, score_stealth
 from freewhirr.store import StateStore, open_store
 from freewhirr.transport import OpenRouterTransport, provider_preferences
 from freewhirr.types import (
@@ -38,6 +39,7 @@ from freewhirr.types import (
     Complexity,
     ExhaustionPolicy,
     FailReason,
+    ModelInfo,
     Outcome,
     Usage,
     extract_message_content,
@@ -200,31 +202,27 @@ class Freewhirr:
         if not force and not self.catalog.stale:
             return self.catalog.free_ids()
         raw = self.transport.list_models()
-        self.catalog.replace([parse_model(item) for item in raw])
+        parsed = [parse_model(item) for item in raw]
+        self.catalog.replace(parsed)
+        self.store.remember_catalog(parsed)
         return self.catalog.free_ids()
 
     async def arefresh_models(self, *, force: bool = False) -> list[str]:
         if not force and not self.catalog.stale:
             return self.catalog.free_ids()
         raw = await self.transport.alist_models()
-        self.catalog.replace([parse_model(item) for item in raw])
+        parsed = [parse_model(item) for item in raw]
+        self.catalog.replace(parsed)
+        self.store.remember_catalog(parsed)
         return self.catalog.free_ids()
 
     def list_free_models(self) -> list[str]:
         self.refresh_models()
-        return merge_model_lists(
-            self.config.free_models,
-            self.catalog.free_ids(),
-            include_discovered=self.config.include_discovered_free,
-        )
+        return self._ordered_free_ids()
 
     async def alist_free_models(self) -> list[str]:
         await self.arefresh_models()
-        return merge_model_lists(
-            self.config.free_models,
-            self.catalog.free_ids(),
-            include_discovered=self.config.include_discovered_free,
-        )
+        return self._ordered_free_ids()
 
     def complete(
         self,
@@ -758,11 +756,7 @@ class Freewhirr:
         return payload
 
     def _model_queue(self, *, requested: str | None) -> list[tuple[str, bool]]:
-        free = merge_model_lists(
-            self.config.free_models,
-            self.catalog.free_ids(),
-            include_discovered=self.config.include_discovered_free,
-        )
+        free = self._ordered_free_ids()
         if self.config.honor_requested_model and requested and requested not in ROUTER_ALIASES:
             if requested in free:
                 free = [requested, *[item for item in free if item != requested]]
@@ -813,6 +807,47 @@ class Freewhirr:
         )
         logger.info("Skipping paid model %s: %s", model_id, decision.reason)
         return False
+
+    def _ordered_free_ids(self) -> list[str]:
+        discovered = [info.id for info in self.catalog.all() if info.is_free]
+        user = [
+            model_id for model_id in self.config.free_models if self._rotation_allowed(model_id)
+        ]
+        allowed_discovered = [
+            model_id for model_id in discovered if self._rotation_allowed(model_id)
+        ]
+        merged = merge_model_lists(
+            user,
+            allowed_discovered,
+            include_discovered=self.config.include_discovered_free,
+        )
+        if not self.config.promote_stealth:
+            return merged
+        stealth = [model_id for model_id in merged if self._stealth_report(model_id).is_stealth]
+        return [*stealth, *[model_id for model_id in merged if model_id not in set(stealth)]]
+
+    def _rotation_allowed(self, model_id: str) -> bool:
+        info = self.catalog.get(model_id)
+        report = self._stealth_report(model_id) if info is not None else None
+        return not rotation_excluded(
+            info, report, deny_data_collection=self.config.deny_data_collection
+        )
+
+    def _stealth_report(self, model_id: str):
+        info = self.catalog.get(model_id)
+        if info is None:
+            return score_stealth(
+                ModelInfo(id=model_id),
+                threshold=self.config.stealth_threshold,
+                new_hours=self.config.stealth_new_hours,
+            )
+        seen = self.store.catalog_seen().get(model_id) or {}
+        return score_stealth(
+            info,
+            first_seen=seen.get("first_seen"),
+            threshold=self.config.stealth_threshold,
+            new_hours=self.config.stealth_new_hours,
+        )
 
     def _compose_quality(
         self,

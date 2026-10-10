@@ -139,6 +139,8 @@ print(response.choices[0].message.content)
 The proxy:
 
 - accepts `POST /v1/chat/completions` (including SSE streaming)
+- accepts `POST /v1/responses` (OpenAI Responses API, including Responses SSE)
+  so current Codex CLI (`wire_api = "responses"`) works
 - accepts `POST /v1/messages` in Anthropic's format (tool_use / tool_result,
   system prompts, stop reasons) and translates to OpenAI-style upstream
 - streams Anthropic SSE (`message_start`, `content_block_*`, `message_delta`,
@@ -226,9 +228,10 @@ Source: [OpenCode providers (v2)](https://opencode.ai/v2/docs/providers/),
 
 ### Codex (OpenAI Codex CLI)
 
-Current Codex only speaks the **Responses API**. `wire_api` accepts only
-`responses`; `chat` was removed. Put this in **user-level**
-`~/.codex/config.toml` (project `.codex/config.toml` cannot set providers):
+Current Codex speaks only the **Responses API**. `wire_api` accepts only
+`responses` (it is also the default). Put the provider in **user-level**
+`~/.codex/config.toml` — project `.codex/config.toml` cannot set
+`model_provider` / `model_providers`.
 
 ```toml
 model = "freewhirr"
@@ -237,13 +240,15 @@ model_provider = "freewhirr"
 [model_providers.freewhirr]
 name = "freewhirr"
 base_url = "http://127.0.0.1:8787/v1"
+env_key = "OPENROUTER_API_KEY"
 wire_api = "responses"
 ```
 
-**Caveat:** freewhirr exposes `/v1/chat/completions` and `/v1/messages`, not
-`POST /v1/responses`. Current Codex will not talk to this proxy until a
-Responses translator exists. Do not set `wire_api = "chat"` — Codex will
-refuse to start.
+`base_url` is the OpenAI root including `/v1`; Codex posts to
+`{base_url}/responses`. The proxy key is unused for auth — `env_key` just
+satisfies Codex. Do not set `wire_api = "chat"` (Codex will refuse to start).
+Do not name the provider `openai`, `ollama`, or `lmstudio` (reserved).
+Needs a tool-calling-capable free model for agent use.
 
 Source: [Codex config reference](https://developers.openai.com/codex/config-reference),
 [advanced configuration](https://developers.openai.com/codex/config-advanced).
@@ -344,9 +349,9 @@ providers:
 ```
 
 Omnigent can also launch Claude Code / Codex against a gateway. Claude Code
-wants the Anthropic root **without** `/v1`; Codex wants Responses (`wire_api:
-responses`) which this proxy does not implement yet. Agent harnesses need
-tools.
+wants the Anthropic root **without** `/v1`; Codex should use
+`wire_api: responses` against `http://127.0.0.1:8787/v1`. Agent harnesses
+need tools.
 
 Source: [Omnigent models](https://omnigent.ai/docs/build/models),
 [harness configuration](https://omnigent.ai/docs/build/harnesses/configuration).
@@ -410,10 +415,63 @@ freewhirr then sends OpenRouter's provider preference
 `{"data_collection": "deny"}` on every completion. OpenRouter will only route
 to providers that do not collect prompts for training.
 
+Stealth/cloaked models and any catalog entry whose description says prompts
+are logged or used for training are also **removed from the rotation** when
+this flag is on. `freewhirr watch` and `freewhirr models --stealth` still
+list them, marked `excluded`.
+
 **This will shrink — sometimes to zero — the set of free endpoints.** OpenRouter
 will return an error that no endpoint matches your data policy. That is the
 tradeoff working as designed. `stop` will then fail closed; `paid` may still
 escalate to a paid model that honors the same preference.
+
+## Stealth and new free models
+
+OpenRouter sometimes drops **stealth** (also called cloaked) models: anonymous
+preview endpoints, usually $0, so a lab can gather feedback. They are free
+**because prompts and outputs are logged** and may be used for training. See
+OpenRouter's [Stealth Program EULA](https://openrouter.ai/terms/stealth).
+
+**Do not send secrets, source you cannot leak, or personal data through a
+stealth model.** `promote_stealth` is off by default for that reason.
+
+Live catalog snapshot (2026-10-10, `GET https://openrouter.ai/api/v1/models`):
+458 models, 19 free (`total_count` matches). Listings expose `id`, `name`,
+`canonical_slug`, `description`, `context_length`, `created`, `pricing`,
+`supported_parameters`, `architecture`, plus `top_provider`,
+`hugging_face_id`, `knowledge_cutoff`, `expiration_date`, `reasoning`,
+and `default_parameters`. **No current listing** used the words stealth,
+cloaked, or logging. The `openrouter/` namespace was routers (`auto`,
+`auto-beta`, `free`, `fusion`, `pareto-code`, `bodybuilder`), not stealth
+drops. Two named free models now advertise a 256000 context
+(`cohere/north-mini-code:free`,
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`), so that length is
+only a weak signal. Historical stealth models such as
+`openrouter/horizon-alpha` and `openrouter/horizon-beta` used the
+`openrouter/` namespace, a codename, 256000 context, and copy that called
+the model cloaked and warned that prompts are logged. Heuristics target
+that shape so the next drop is caught.
+
+```bash
+freewhirr models --new        # $0 models first seen since the last snapshot
+freewhirr models --stealth    # scored as stealth/cloaked
+freewhirr watch --once        # one scan (also the default poller)
+freewhirr watch --interval 60
+```
+
+`watch` persists first-seen timestamps in the local ledger, diffs against
+the last catalog, and optionally POSTs JSON to `FREEWHIRR_ALERT_WEBHOOK`.
+
+```yaml
+promote_stealth: true          # try detected stealth models first
+alert_webhook: https://example.invalid/hook
+watch_interval: 300
+```
+
+When `deny_data_collection` is on, stealth models and any model whose
+description mentions logging or training stay visible to `watch` / `--stealth`
+but are excluded from chat, the proxy, and `freewhirr models` (the rotation
+list).
 
 See OpenRouter's [provider routing](https://openrouter.ai/docs/guides/routing/provider-selection)
 docs for `data_collection` and the related `zdr` (zero data retention) flag.
@@ -471,6 +529,9 @@ Files, first match wins:
 | Savings baseline model | `FREEWHIRR_BASELINE_MODEL` | `openai/gpt-4o-mini` |
 | Skip models that cannot call tools | `FREEWHIRR_REQUIRE_TOOL_SUPPORT` | `true` |
 | Fail over on bad tool calls | `FREEWHIRR_VALIDATE_TOOL_CALLS` | `true` |
+| Promote stealth models to the front | `FREEWHIRR_PROMOTE_STEALTH` | `false` |
+| Watch poll interval (seconds) | `FREEWHIRR_WATCH_INTERVAL` | `300` |
+| Watch / stealth webhook | `FREEWHIRR_ALERT_WEBHOOK` | unset |
 
 ```bash
 freewhirr config          # resolved settings, key redacted

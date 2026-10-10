@@ -23,6 +23,16 @@ from freewhirr.errors import (
     FreewhirrError,
     PaidFallbackExhausted,
 )
+from freewhirr.responses import (
+    ResponseMemory,
+    aopenai_chunks_to_responses_sse,
+    append_assistant_message,
+    openai_to_responses,
+    responses_to_openai,
+)
+from freewhirr.responses import (
+    sse_event as responses_sse_event,
+)
 from freewhirr.router import Freewhirr
 from freewhirr.stats import collect_stats
 from freewhirr.types import Complexity
@@ -35,6 +45,7 @@ def create_app(client: Freewhirr | None = None) -> FastAPI:
         version="0.1.0",
     )
     app.state.client = client
+    app.state.responses = ResponseMemory()
 
     @app.middleware("http")
     async def bind_client(request: Request, call_next):  # type: ignore[no-untyped-def]
@@ -185,6 +196,60 @@ def create_app(client: Freewhirr | None = None) -> FastAPI:
             raise _http_error(exc) from exc
         return JSONResponse(openai_to_anthropic(result.to_openai(), requested_model=model))
 
+    @app.post("/v1/responses")
+    async def responses(
+        request: Request,
+        x_freewhirr_complexity: str | None = Header(default=None),
+    ) -> Any:
+        router: Freewhirr = app.state.client
+        memory: ResponseMemory = app.state.responses
+        try:
+            body = await request.json()
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Request body must be JSON") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+
+        stream = bool(body.get("stream", False))
+        complexity = _complexity_from(request, x_freewhirr_complexity, body)
+        previous = body.get("previous_response_id")
+        converted = responses_to_openai(body)
+        model = converted.pop("model", None)
+        history = memory.history(previous if isinstance(previous, str) else None)
+        openai_messages = [*history, *(converted.pop("messages") or [])]
+        extra_body = {key: value for key, value in converted.items() if value is not None}
+
+        if stream:
+            return StreamingResponse(
+                _responses_stream(
+                    router,
+                    memory=memory,
+                    messages=openai_messages,
+                    model=model,
+                    complexity=complexity,
+                    extra_body=extra_body,
+                    previous_response_id=previous if isinstance(previous, str) else None,
+                ),
+                media_type="text/event-stream",
+            )
+
+        try:
+            result = await router.acomplete(
+                messages=openai_messages,
+                model=model,
+                complexity=complexity,
+                extra_body=extra_body,
+            )
+        except FreewhirrError as exc:
+            raise _http_error(exc) from exc
+        payload = openai_to_responses(
+            result.to_openai(),
+            requested_model=model,
+            previous_response_id=previous if isinstance(previous, str) else None,
+        )
+        memory.remember(str(payload["id"]), append_assistant_message(openai_messages, result.raw))
+        return JSONResponse(payload)
+
     return app
 
 
@@ -244,6 +309,47 @@ async def _anthropic_stream_response(
             {
                 "type": "error",
                 "error": {"type": type(exc).__name__, "message": str(exc)},
+            },
+        )
+
+
+async def _responses_stream(
+    router: Freewhirr,
+    *,
+    memory: ResponseMemory,
+    messages: list[dict[str, Any]],
+    model: Any,
+    complexity: Complexity | str | None,
+    extra_body: dict[str, Any],
+    previous_response_id: str | None,
+) -> AsyncIterator[str]:
+    del previous_response_id
+    requested = str(model or "freewhirr")
+    response_id = f"resp_{requested.replace('/', '_')[:24]}"
+    try:
+        async for event in aopenai_chunks_to_responses_sse(
+            router.astream(
+                messages=messages,
+                model=model,
+                complexity=complexity,
+                extra_body=extra_body,
+            ),
+            model=requested,
+            response_id=response_id,
+        ):
+            yield event
+        memory.remember(response_id, messages)
+    except FreewhirrError as exc:
+        yield responses_sse_event(
+            "response.failed",
+            {
+                "type": "response.failed",
+                "response": {
+                    "id": response_id,
+                    "object": "response",
+                    "status": "failed",
+                    "error": {"type": type(exc).__name__, "message": str(exc)},
+                },
             },
         )
 

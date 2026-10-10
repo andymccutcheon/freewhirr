@@ -240,3 +240,111 @@ async def test_proxy_count_tokens(tmp_path: Path) -> None:
         )
     assert response.status_code == 200
     assert response.json()["input_tokens"] >= 1
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses(tmp_path: Path) -> None:
+    mock_models()
+    mock_completions({FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "pong"))})
+    app = create_app(make_client(tmp_path))
+    async with _http(app) as client:
+        response = await client.post(
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "instructions": "Be brief.",
+                "input": "hi",
+                "max_output_tokens": 32,
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["object"] == "response"
+    assert body["status"] == "completed"
+    assert body["output"][0]["content"][0]["text"] == "pong"
+    assert body["usage"]["output_tokens"] >= 1
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses_tools_and_followup(tmp_path: Path) -> None:
+    mock_models()
+    mock_completions(
+        {
+            FREE_B: [
+                httpx.Response(200, json=tool_completion_payload(FREE_B)),
+                httpx.Response(200, json=completion_payload(FREE_B, "done")),
+            ]
+        }
+    )
+    app = create_app(make_client(tmp_path))
+    async with _http(app) as client:
+        first = await client.post(
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "input": "lookup x",
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "lookup",
+                        "parameters": {"type": "object", "properties": {"q": {"type": "string"}}},
+                    }
+                ],
+            },
+        )
+        assert first.status_code == 200
+        payload = first.json()
+        assert payload["output"][0]["type"] == "function_call"
+        second = await client.post(
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "previous_response_id": payload["id"],
+                "input": [
+                    {
+                        "type": "function_call_output",
+                        "call_id": payload["output"][0]["call_id"],
+                        "output": "found it",
+                    }
+                ],
+            },
+        )
+    assert second.status_code == 200
+    assert second.json()["output"][0]["content"][0]["text"] == "done"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses_stream(tmp_path: Path) -> None:
+    mock_models()
+    body = (
+        'data: {"id":"s1","choices":[{"delta":{"content":"tok"},"index":0}]}\n\n'
+        'data: {"id":"s1","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        "data: [DONE]\n\n"
+    )
+    mock_completions(
+        {
+            FREE_A: httpx.Response(
+                200,
+                content=body.encode(),
+                headers={"content-type": "text/event-stream"},
+            )
+        }
+    )
+    app = create_app(make_client(tmp_path))
+    async with (
+        _http(app) as client,
+        client.stream(
+            "POST",
+            "/v1/responses",
+            json={"model": "freewhirr", "input": "hi", "stream": True},
+        ) as response,
+    ):
+        assert response.status_code == 200
+        text = "".join([part async for part in response.aiter_text()])
+    assert "event: response.created" in text
+    assert "response.output_text.delta" in text
+    assert "tok" in text
+    assert "event: response.completed" in text
