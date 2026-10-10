@@ -37,6 +37,11 @@ format, then pytest. No live OpenRouter calls.
 - Config is intentionally boring: env vars + YAML/TOML + constructor kwargs.
   Do not introduce a cloud control plane.
 
+## Releasing
+
+Maintainers: see [RELEASING.md](RELEASING.md). Publishing is Trusted
+Publishing only — do not add a PyPI API token to GitHub secrets.
+
 ## Pull requests
 
 - Small, focused diffs with a short rationale.

@@ -1,5 +1,6 @@
 """freewhirr — spend nothing until you choose to."""
 
+from freewhirr._version import __version__
 from freewhirr.config import FreewhirrConfig, load_config
 from freewhirr.errors import (
     BudgetExceeded,
@@ -21,8 +22,6 @@ from freewhirr.quality import (
 from freewhirr.router import Freewhirr
 from freewhirr.stats import StatsReport, collect_stats
 from freewhirr.types import ChatResult, Complexity, ExhaustionPolicy, Usage
-
-__version__ = "0.1.0"
 
 __all__ = [
     "BudgetExceeded",

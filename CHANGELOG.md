@@ -3,6 +3,8 @@
 ## 0.1.0
 
 - First public release of **freewhirr** (`pip install freewhirr`).
+- Releases publish to PyPI via Trusted Publishing (OIDC). See
+  [RELEASING.md](https://github.com/andymccutcheon/freewhirr/blob/main/RELEASING.md).
 - Renamed from the working title "freeloader" before publish. The import,
   CLI, config files, env prefix (`FREEWHIRR_*`), and PyPI name are all
   `freewhirr`. `OPENROUTER_API_KEY` is unchanged.
