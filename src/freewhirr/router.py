@@ -22,7 +22,13 @@ from freewhirr.errors import (
     QualityFailed,
 )
 from freewhirr.models import ModelCatalog, merge_model_lists, parse_model
-from freewhirr.quality import QualityCheck, coerce_quality_check
+from freewhirr.quality import (
+    QualityCheck,
+    ToolCallCheck,
+    compose_quality_checks,
+    extract_tool_names,
+    request_uses_tools,
+)
 from freewhirr.retry import backoff_delays, classify_failure
 from freewhirr.store import StateStore, open_store
 from freewhirr.transport import OpenRouterTransport, provider_preferences
@@ -233,12 +239,16 @@ class Freewhirr:
     ) -> ChatResult:
         started = time.perf_counter()
         request_id = _request_id()
-        quality_check = coerce_quality_check(quality)
+        quality_check = self._compose_quality(quality, params, extra_body)
         self.refresh_models()
         attempts: list[Attempt] = []
         last_error: Exception | None = None
 
         for model_id, paid in self._model_queue(requested=model):
+            if not self._allow_tools(
+                model_id, params=params, extra_body=extra_body, attempts=attempts
+            ):
+                continue
             if paid and not self._allow_paid(
                 model_id,
                 attempts=attempts,
@@ -302,12 +312,16 @@ class Freewhirr:
     ) -> ChatResult:
         started = time.perf_counter()
         request_id = _request_id()
-        quality_check = coerce_quality_check(quality)
+        quality_check = self._compose_quality(quality, params, extra_body)
         await self.arefresh_models()
         attempts: list[Attempt] = []
         last_error: Exception | None = None
 
         for model_id, paid in self._model_queue(requested=model):
+            if not self._allow_tools(
+                model_id, params=params, extra_body=extra_body, attempts=attempts
+            ):
+                continue
             if paid and not self._allow_paid(
                 model_id,
                 attempts=attempts,
@@ -375,6 +389,10 @@ class Freewhirr:
         last_error: Exception | None = None
 
         for model_id, paid in self._model_queue(requested=model):
+            if not self._allow_tools(
+                model_id, params=params, extra_body=extra_body, attempts=attempts
+            ):
+                continue
             if paid and not self._allow_paid(
                 model_id,
                 attempts=attempts,
@@ -439,6 +457,10 @@ class Freewhirr:
         last_error: Exception | None = None
 
         for model_id, paid in self._model_queue(requested=model):
+            if not self._allow_tools(
+                model_id, params=params, extra_body=extra_body, attempts=attempts
+            ):
+                continue
             if paid and not self._allow_paid(
                 model_id,
                 attempts=attempts,
@@ -790,6 +812,42 @@ class Freewhirr:
             )
         )
         logger.info("Skipping paid model %s: %s", model_id, decision.reason)
+        return False
+
+    def _compose_quality(
+        self,
+        quality: QualityCheck | Callable[[dict[str, Any]], bool] | None,
+        params: dict[str, Any],
+        extra_body: dict[str, Any] | None,
+    ) -> QualityCheck | None:
+        tool_check = None
+        if self.config.validate_tool_calls and request_uses_tools(params, extra_body):
+            tool_check = ToolCallCheck(extract_tool_names(params, extra_body))
+        return compose_quality_checks(quality, tool_check)
+
+    def _allow_tools(
+        self,
+        model_id: str,
+        *,
+        params: dict[str, Any],
+        extra_body: dict[str, Any] | None,
+        attempts: list[Attempt],
+    ) -> bool:
+        if not self.config.require_tool_support:
+            return True
+        if not request_uses_tools(params, extra_body):
+            return True
+        info = self.catalog.get(model_id)
+        if info is None or info.supports_tools is not False:
+            return True
+        attempts.append(
+            Attempt(
+                model=model_id,
+                reason=FailReason.SKIPPED.value,
+                message="model metadata does not advertise tools/function calling",
+            )
+        )
+        logger.info("Skipping %s: OpenRouter metadata says it cannot call tools", model_id)
         return False
 
     def _apply_quality(

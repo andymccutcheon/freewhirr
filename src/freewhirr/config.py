@@ -54,6 +54,8 @@ class FreewhirrConfig(BaseModel):
     baseline_paid_model: str = "openai/gpt-4o-mini"
     honor_requested_model: bool = False
     fetch_generation_cost: bool = False
+    require_tool_support: bool = True
+    validate_tool_calls: bool = True
     app_url: str = DEFAULT_APP_URL
     app_title: str = DEFAULT_APP_TITLE
     log_level: str = "INFO"
@@ -215,6 +217,12 @@ def env_overrides() -> dict[str, Any]:
         mapping["honor_requested_model"] = _parse_bool(
             os.environ["FREEWHIRR_HONOR_REQUESTED_MODEL"]
         )
+    if os.environ.get("FREEWHIRR_REQUIRE_TOOL_SUPPORT"):
+        mapping["require_tool_support"] = _parse_bool(
+            os.environ["FREEWHIRR_REQUIRE_TOOL_SUPPORT"]
+        )
+    if os.environ.get("FREEWHIRR_VALIDATE_TOOL_CALLS"):
+        mapping["validate_tool_calls"] = _parse_bool(os.environ["FREEWHIRR_VALIDATE_TOOL_CALLS"])
     if os.environ.get("FREEWHIRR_APP_URL"):
         mapping["app_url"] = os.environ["FREEWHIRR_APP_URL"]
     if os.environ.get("FREEWHIRR_APP_TITLE"):

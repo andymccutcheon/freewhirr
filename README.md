@@ -115,9 +115,10 @@ result = client.complete(
 Ledgers live on disk (SQLite by default, or a JSON file). They are local to
 the machine that ran the request. Nothing is phoned home.
 
-## OpenAI-compatible proxy
+## OpenAI- and Anthropic-compatible proxy
 
-Any language that can speak the OpenAI HTTP API can sit behind freewhirr.
+Any language that can speak the OpenAI HTTP API — or the Anthropic Messages
+API — can sit behind freewhirr.
 
 ```bash
 freewhirr --config examples/stop.yaml serve --port 8787
@@ -138,10 +139,239 @@ print(response.choices[0].message.content)
 The proxy:
 
 - accepts `POST /v1/chat/completions` (including SSE streaming)
+- accepts `POST /v1/messages` in Anthropic's format (tool_use / tool_result,
+  system prompts, stop reasons) and translates to OpenAI-style upstream
+- streams Anthropic SSE (`message_start`, `content_block_*`, `message_delta`,
+  `message_stop`)
+- estimates `POST /v1/messages/count_tokens` from the prompt (heuristic, not
+  a billed tokenizer)
 - lists the current free catalog at `GET /v1/models`
 - honors `X-Freewhirr-Complexity: high` for the paid-complexity gate
 - ignores the client's `model` field unless you set `honor_requested_model: true`
   (so a hardcoded `gpt-4o-mini` in an app cannot accidentally skip the free list)
+
+Claude Code's `ANTHROPIC_BASE_URL` is the **gateway root without `/v1`**
+(`http://127.0.0.1:8787`). OpenAI-compatible clients include `/v1`.
+
+## Use with…
+
+Agent harnesses that speak OpenAI Chat Completions or Anthropic Messages can
+point at the proxy. Most of them **require tool-calling-capable models**;
+freewhirr skips catalog entries whose OpenRouter `supported_parameters` omit
+`tools` / `tool_choice` / `functions` (see `require_tool_support` below).
+
+Start the proxy first:
+
+```bash
+export OPENROUTER_API_KEY=sk-or-v1-...
+freewhirr --config examples/stop.yaml serve --port 8787
+```
+
+### Claude Code
+
+Set the gateway root (no `/v1`) and a credential. Claude Code then calls
+`/v1/messages` and optional `/v1/messages/count_tokens`.
+
+```bash
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+export ANTHROPIC_API_KEY=not-used-by-proxy
+claude
+```
+
+Or persist in `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787",
+    "ANTHROPIC_API_KEY": "not-used-by-proxy"
+  }
+}
+```
+
+Use `ANTHROPIC_AUTH_TOKEN` instead if the client should send a bearer token.
+Needs models that can call tools. Settings-file `env` wins over the shell.
+
+Source: [Connect Claude Code to an LLM gateway](https://code.claude.com/docs/en/llm-gateway-connect),
+[gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol).
+
+### OpenCode
+
+Current docs use `opencode.json` / `opencode.jsonc` with a custom
+OpenAI-compatible provider. `baseURL` includes `/v1`.
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "freewhirr/auto",
+  "providers": {
+    "freewhirr": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "http://127.0.0.1:8787/v1" },
+      "models": {
+        "auto": { "modelID": "freewhirr" }
+      }
+    }
+  }
+}
+```
+
+To send the built-in Anthropic provider through the Messages API instead,
+override `providers.anthropic.settings.baseURL` to `http://127.0.0.1:8787/v1`
+(OpenCode appends `/messages`). Older docs still show a `provider.<id>.options.baseURL`
+shape with `npm: "@ai-sdk/openai-compatible"`. Agent use needs tools.
+
+Source: [OpenCode providers (v2)](https://opencode.ai/v2/docs/providers/),
+[classic providers](https://opencode.ai/docs/providers).
+
+### Codex (OpenAI Codex CLI)
+
+Current Codex only speaks the **Responses API**. `wire_api` accepts only
+`responses`; `chat` was removed. Put this in **user-level**
+`~/.codex/config.toml` (project `.codex/config.toml` cannot set providers):
+
+```toml
+model = "freewhirr"
+model_provider = "freewhirr"
+
+[model_providers.freewhirr]
+name = "freewhirr"
+base_url = "http://127.0.0.1:8787/v1"
+wire_api = "responses"
+```
+
+**Caveat:** freewhirr exposes `/v1/chat/completions` and `/v1/messages`, not
+`POST /v1/responses`. Current Codex will not talk to this proxy until a
+Responses translator exists. Do not set `wire_api = "chat"` — Codex will
+refuse to start.
+
+Source: [Codex config reference](https://developers.openai.com/codex/config-reference),
+[advanced configuration](https://developers.openai.com/codex/config-advanced).
+
+### Cursor
+
+Cursor Settings → **Models**: enable **OpenAI API Key**, turn on
+**Override OpenAI Base URL**, and add a custom model id such as `freewhirr`.
+
+```text
+OpenAI API Key:          not-used-by-proxy
+Override OpenAI Base URL: https://<public-https-host>/v1
+```
+
+**Caveat:** Cursor's backend, not the editor, calls the base URL. `localhost`
+and LAN addresses resolve on Cursor's servers and will not reach your machine.
+Expose the proxy with a public HTTPS tunnel (ngrok, Cloudflare Tunnel, …).
+Agent mode needs tool-calling models. There is no first-party
+`docs.cursor.com` BYOK page; this matches Cursor staff on the official forum.
+
+Source: [Cursor forum — local LLM](https://forum.cursor.com/t/how-can-i-use-a-local-llm-on-my-desktop-ai-computer/152419).
+
+### Pi
+
+[Pi](https://pi.dev) (badlogic/pi-mono) loads custom endpoints from
+`~/.pi/agent/models.json`. Use `openai-completions` for this proxy.
+
+```json
+{
+  "providers": {
+    "freewhirr": {
+      "baseUrl": "http://127.0.0.1:8787/v1",
+      "api": "openai-completions",
+      "apiKey": "not-used-by-proxy",
+      "models": [{ "id": "freewhirr" }]
+    }
+  }
+}
+```
+
+`$NAME` / `${NAME}` interpolation works for `apiKey`. Opening `/model` reloads
+the file. Prefer a tool-capable model for the coding agent.
+
+Source: [Pi — Choose a Model](https://pi.dev/docs/latest/models).
+
+### Goose
+
+Goose's OpenAI provider is the documented path for OpenAI-compatible proxies.
+`OPENAI_HOST` is the **root with no path**; `OPENAI_BASE_PATH` is the chat
+completions suffix. Goose **requires tool calling** for anything beyond plain
+chat (disable all extensions if you must use a no-tools model).
+
+```bash
+export OPENAI_API_KEY=not-used-by-proxy
+export OPENAI_HOST=http://127.0.0.1:8787
+export OPENAI_BASE_PATH=v1/chat/completions
+goose session
+```
+
+Or `goose configure` and pick OpenAI. A 404 usually means `OPENAI_BASE_PATH`
+is wrong. Keys placed only in `config.yaml` are ignored.
+
+Source: [Goose providers](https://github.com/block/goose/blob/main/documentation/docs/getting-started/providers.md).
+
+### Berd
+
+<!-- TODO: no first-party custom base-URL docs -->
+
+**TODO.** [Berd](https://github.com/block/berd) is Block's desktop UI over a
+Goose ACP sidecar. The public README covers setup, bundling, and enterprise
+distribution seams. It does **not** document a Berd-specific custom OpenAI or
+Anthropic base URL, env var, or settings field. Do not invent one. If you
+control the bundled Goose sidecar, configure that sidecar using the Goose
+section above.
+
+Searched: [block/berd README](https://github.com/block/berd), repository docs
+tree, and public web results for "Berd custom OpenAI base URL" — no official
+end-user provider page.
+
+### Omnigent
+
+Run `omni setup` and add a **Gateway** (base URL + key), or write
+`~/.omnigent/config.yaml`. Use the OpenAI-compatible `/v1` URL for
+OpenAI-style harnesses.
+
+```yaml
+# ~/.omnigent/config.yaml
+providers:
+  freewhirr:
+    kind: gateway
+    default: true
+    openai:
+      base_url: http://127.0.0.1:8787/v1
+      api_key: not-used-by-proxy
+      wire_api: chat
+      models:
+        default: freewhirr
+```
+
+Omnigent can also launch Claude Code / Codex against a gateway. Claude Code
+wants the Anthropic root **without** `/v1`; Codex wants Responses (`wire_api:
+responses`) which this proxy does not implement yet. Agent harnesses need
+tools.
+
+Source: [Omnigent models](https://omnigent.ai/docs/build/models),
+[harness configuration](https://omnigent.ai/docs/build/harnesses/configuration).
+
+### Hermes
+
+[Hermes Agent](https://hermes-agent.nousresearch.com) (Nous Research) talks to
+any OpenAI-compatible `/v1/chat/completions` endpoint. Interactive:
+`hermes model` → "Custom endpoint". Or edit `~/.hermes/config.yaml`
+(`model.base_url`, not the legacy `model.api_base`):
+
+```yaml
+# ~/.hermes/config.yaml
+model:
+  default: freewhirr
+  provider: custom
+  base_url: http://127.0.0.1:8787/v1
+  api_key: not-used-by-proxy
+```
+
+`OPENAI_BASE_URL` only overrides the `openai-api` provider, not `custom`.
+Tool-calling models recommended.
+
+Source: [Hermes providers](https://hermes-agent.nousresearch.com/docs/integrations/providers),
+[environment variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables).
 
 ## Cost-savings stats
 
@@ -195,10 +425,15 @@ docs for `data_collection` and the related `zdr` (zero data retention) flag.
    seconds (default one hour).
 2. Try each free model in order. Retry the same model with jittered exponential
    backoff on 429s, 5xx, and timeouts. Fail over immediately on context-length
-   errors, most 4xx, and optional quality-check failures.
-3. If a quality check is set (JSON Schema, minimum length, or any callable)
-   and it rejects the response, treat that like a failover and try the next
-   model. Quality checks are skipped for streaming.
+   errors, most 4xx, and optional quality-check failures. When the request
+   includes `tools` / `functions` and `require_tool_support` is on, skip models
+   whose OpenRouter metadata omits tool calling. Unknown catalog entries are
+   still tried.
+3. If a quality check is set (JSON Schema, minimum length, tool-call
+   validation, or any callable) and it rejects the response, treat that like a
+   failover and try the next model. Malformed tool calls (invalid JSON
+   arguments or an unknown tool name) fail the same way when
+   `validate_tool_calls` is on. Quality checks are skipped for streaming.
 4. When the free list is exhausted, apply the exhaustion policy.
 5. Streaming failovers only happen **before the first token**. After tokens
    have been sent to the caller, a mid-stream error is surfaced rather than
@@ -234,6 +469,8 @@ Files, first match wins:
 | Ledger path | `FREEWHIRR_STATE_PATH` | `~/.freewhirr/state.sqlite` |
 | Ledger backend | `FREEWHIRR_STATE_BACKEND` | `sqlite` (`json` also works) |
 | Savings baseline model | `FREEWHIRR_BASELINE_MODEL` | `openai/gpt-4o-mini` |
+| Skip models that cannot call tools | `FREEWHIRR_REQUIRE_TOOL_SUPPORT` | `true` |
+| Fail over on bad tool calls | `FREEWHIRR_VALIDATE_TOOL_CALLS` | `true` |
 
 ```bash
 freewhirr config          # resolved settings, key redacted
@@ -249,6 +486,7 @@ from freewhirr import (
     ExhaustionPolicy,
     MinLengthCheck,
     JsonSchemaCheck,
+    ToolCallCheck,
 )
 
 client = Freewhirr(

@@ -11,7 +11,13 @@ from freewhirr.errors import (
     PaidFallbackExhausted,
     QualityFailed,
 )
-from freewhirr.quality import CallableCheck, JsonSchemaCheck, MinLengthCheck, QualityCheck
+from freewhirr.quality import (
+    CallableCheck,
+    JsonSchemaCheck,
+    MinLengthCheck,
+    QualityCheck,
+    ToolCallCheck,
+)
 from freewhirr.router import Freewhirr
 from freewhirr.stats import StatsReport, collect_stats
 from freewhirr.types import ChatResult, Complexity, ExhaustionPolicy, Usage
@@ -37,6 +43,7 @@ __all__ = [
     "QualityCheck",
     "QualityFailed",
     "StatsReport",
+    "ToolCallCheck",
     "Usage",
     "collect_stats",
     "load_config",

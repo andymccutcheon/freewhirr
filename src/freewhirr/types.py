@@ -57,6 +57,7 @@ class ModelInfo:
     name: str = ""
     context_length: int | None = None
     pricing: ModelPricing = field(default_factory=ModelPricing)
+    supports_tools: bool | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     @property

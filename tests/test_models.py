@@ -22,6 +22,21 @@ def test_parse_free_and_paid() -> None:
     assert free.is_free
     assert not paid.is_free
     assert paid.pricing.prompt == 0.00000015
+    assert free.supports_tools is None
+    assert paid.supports_tools is None
+
+
+def test_parse_supported_parameters() -> None:
+    no_tools = parse_model(
+        {"id": "a:free", "supported_parameters": ["temperature", "max_tokens"]}
+    )
+    with_tools = parse_model(
+        {"id": "b:free", "supported_parameters": ["tools", "tool_choice"]}
+    )
+    via_functions = parse_model({"id": "c:free", "supported_parameters": ["functions"]})
+    assert no_tools.supports_tools is False
+    assert with_tools.supports_tools is True
+    assert via_functions.supports_tools is True
 
 
 def test_free_suffix_without_pricing() -> None:

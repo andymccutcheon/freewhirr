@@ -25,18 +25,21 @@ MODELS_PAYLOAD = {
             "name": "Llama 3.2 3B",
             "context_length": 8192,
             "pricing": {"prompt": "0", "completion": "0", "request": "0"},
+            "supported_parameters": ["temperature", "top_p", "max_tokens"],
         },
         {
             "id": FREE_B,
             "name": "Gemma 2 9B",
             "context_length": 8192,
             "pricing": {"prompt": "0", "completion": "0", "request": "0"},
+            "supported_parameters": ["temperature", "tools", "tool_choice"],
         },
         {
             "id": PAID,
             "name": "GPT-4o mini",
             "context_length": 128000,
             "pricing": {"prompt": "0.00000015", "completion": "0.0000006", "request": "0"},
+            "supported_parameters": ["tools", "tool_choice", "functions"],
         },
         {
             "id": "anthropic/claude-sonnet-4",
@@ -74,6 +77,44 @@ def completion_payload(
             "cost": cost,
         },
     }
+
+
+LOOKUP_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "lookup",
+        "description": "Look something up",
+        "parameters": {
+            "type": "object",
+            "properties": {"q": {"type": "string"}},
+            "required": ["q"],
+        },
+    },
+}
+
+
+def tool_completion_payload(
+    model: str,
+    *,
+    name: str = "lookup",
+    arguments: str = '{"q":"x"}',
+    call_id: str = "call_1",
+    cost: float = 0.0,
+) -> dict[str, Any]:
+    payload = completion_payload(model, content="", cost=cost)
+    payload["choices"][0]["finish_reason"] = "tool_calls"
+    payload["choices"][0]["message"] = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {"name": name, "arguments": arguments},
+            }
+        ],
+    }
+    return payload
 
 
 def make_config(tmp_path: Path, **updates: Any) -> FreewhirrConfig:

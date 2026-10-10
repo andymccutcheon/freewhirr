@@ -73,3 +73,11 @@ def test_paid_policy_requires_models() -> None:
 def test_invalid_share() -> None:
     with pytest.raises(ValidationError):
         FreewhirrConfig(max_paid_share=1.5)
+
+
+def test_tool_routing_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FREEWHIRR_REQUIRE_TOOL_SUPPORT", "false")
+    monkeypatch.setenv("FREEWHIRR_VALIDATE_TOOL_CALLS", "0")
+    config = load_config()
+    assert config.require_tool_support is False
+    assert config.validate_tool_calls is False

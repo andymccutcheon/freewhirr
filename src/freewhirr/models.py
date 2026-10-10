@@ -36,8 +36,18 @@ def parse_model(raw: dict[str, Any]) -> ModelInfo:
         name=str(raw.get("name") or ""),
         context_length=context_length,
         pricing=pricing,
+        supports_tools=_infer_supports_tools(raw),
         raw=raw,
     )
+
+
+def _infer_supports_tools(raw: dict[str, Any]) -> bool | None:
+    """True/False from OpenRouter ``supported_parameters``; None if unknown."""
+    params = raw.get("supported_parameters")
+    if not isinstance(params, list):
+        return None
+    names = {str(item).lower() for item in params}
+    return bool(names & {"tools", "tool_choice", "functions"})
 
 
 def is_free_model(info: ModelInfo) -> bool:

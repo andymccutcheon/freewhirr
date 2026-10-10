@@ -9,6 +9,13 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from freewhirr.anthropic import (
+    anthropic_to_openai,
+    aopenai_chunks_to_anthropic_sse,
+    count_tokens,
+    openai_to_anthropic,
+    sse_event,
+)
 from freewhirr.errors import (
     BudgetExceeded,
     ConfigError,
@@ -125,6 +132,59 @@ def create_app(client: Freewhirr | None = None) -> FastAPI:
         payload.setdefault("object", "chat.completion")
         return JSONResponse(payload)
 
+    @app.post("/v1/messages/count_tokens")
+    async def messages_count_tokens(request: Request) -> dict[str, int]:
+        try:
+            body = await request.json()
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Request body must be JSON") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+        return count_tokens(body)
+
+    @app.post("/v1/messages")
+    async def messages(
+        request: Request,
+        x_freewhirr_complexity: str | None = Header(default=None),
+    ) -> Any:
+        router: Freewhirr = app.state.client
+        try:
+            body = await request.json()
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Request body must be JSON") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Request body must be a JSON object")
+
+        stream = bool(body.get("stream", False))
+        complexity = _complexity_from(request, x_freewhirr_complexity, body)
+        converted = anthropic_to_openai(body)
+        model = converted.pop("model", None)
+        openai_messages = converted.pop("messages", None)
+        extra_body = {key: value for key, value in converted.items() if value is not None}
+
+        if stream:
+            return StreamingResponse(
+                _anthropic_stream_response(
+                    router,
+                    messages=openai_messages,
+                    model=model,
+                    complexity=complexity,
+                    extra_body=extra_body,
+                ),
+                media_type="text/event-stream",
+            )
+
+        try:
+            result = await router.acomplete(
+                messages=openai_messages,
+                model=model,
+                complexity=complexity,
+                extra_body=extra_body,
+            )
+        except FreewhirrError as exc:
+            raise _http_error(exc) from exc
+        return JSONResponse(openai_to_anthropic(result.to_openai(), requested_model=model))
+
     return app
 
 
@@ -156,6 +216,36 @@ async def _stream_response(
         }
         yield f"data: {json.dumps(error)}\n\n"
         yield "data: [DONE]\n\n"
+
+
+async def _anthropic_stream_response(
+    router: Freewhirr,
+    *,
+    messages: Any,
+    model: Any,
+    complexity: Complexity | str | None,
+    extra_body: dict[str, Any],
+) -> AsyncIterator[str]:
+    requested = str(model or "freewhirr")
+    try:
+        async for event in aopenai_chunks_to_anthropic_sse(
+            router.astream(
+                messages=messages,
+                model=model,
+                complexity=complexity,
+                extra_body=extra_body,
+            ),
+            model=requested,
+        ):
+            yield event
+    except FreewhirrError as exc:
+        yield sse_event(
+            "error",
+            {
+                "type": "error",
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            },
+        )
 
 
 def _complexity_from(
