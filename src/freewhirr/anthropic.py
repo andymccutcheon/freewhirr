@@ -296,9 +296,7 @@ class _AnthropicStream:
             }
         for choice in chunk.get("choices") or []:
             if choice.get("finish_reason"):
-                self.finish_reason = STOP_REASON_MAP.get(
-                    str(choice["finish_reason"]), "end_turn"
-                )
+                self.finish_reason = STOP_REASON_MAP.get(str(choice["finish_reason"]), "end_turn")
             delta = choice.get("delta") or {}
             text = delta.get("content")
             if isinstance(text, str) and text:
@@ -397,8 +395,6 @@ class _AnthropicStream:
     def _close_block(self) -> list[str]:
         if self.open_kind is None:
             return []
-        event = sse_event(
-            "content_block_stop", {"type": "content_block_stop", "index": self.index}
-        )
+        event = sse_event("content_block_stop", {"type": "content_block_stop", "index": self.index})
         self.open_kind = None
         return [event]

@@ -218,9 +218,7 @@ def env_overrides() -> dict[str, Any]:
             os.environ["FREEWHIRR_HONOR_REQUESTED_MODEL"]
         )
     if os.environ.get("FREEWHIRR_REQUIRE_TOOL_SUPPORT"):
-        mapping["require_tool_support"] = _parse_bool(
-            os.environ["FREEWHIRR_REQUIRE_TOOL_SUPPORT"]
-        )
+        mapping["require_tool_support"] = _parse_bool(os.environ["FREEWHIRR_REQUIRE_TOOL_SUPPORT"])
     if os.environ.get("FREEWHIRR_VALIDATE_TOOL_CALLS"):
         mapping["validate_tool_calls"] = _parse_bool(os.environ["FREEWHIRR_VALIDATE_TOOL_CALLS"])
     if os.environ.get("FREEWHIRR_APP_URL"):

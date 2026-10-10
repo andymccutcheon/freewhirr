@@ -27,12 +27,8 @@ def test_parse_free_and_paid() -> None:
 
 
 def test_parse_supported_parameters() -> None:
-    no_tools = parse_model(
-        {"id": "a:free", "supported_parameters": ["temperature", "max_tokens"]}
-    )
-    with_tools = parse_model(
-        {"id": "b:free", "supported_parameters": ["tools", "tool_choice"]}
-    )
+    no_tools = parse_model({"id": "a:free", "supported_parameters": ["temperature", "max_tokens"]})
+    with_tools = parse_model({"id": "b:free", "supported_parameters": ["tools", "tool_choice"]})
     via_functions = parse_model({"id": "c:free", "supported_parameters": ["functions"]})
     assert no_tools.supports_tools is False
     assert with_tools.supports_tools is True

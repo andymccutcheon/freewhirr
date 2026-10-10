@@ -131,9 +131,5 @@ def test_all_models_skipped_when_none_support_tools(tmp_path: Path) -> None:
     client = make_client(tmp_path, free_models=[FREE_A], include_discovered_free=False)
     with pytest.raises(FreeModelsExhausted):
         client.complete(messages=_tool_calls(), tools=[LOOKUP_TOOL])
-    posted = [
-        call
-        for call in respx.calls
-        if call.request.url.path.endswith("/chat/completions")
-    ]
+    posted = [call for call in respx.calls if call.request.url.path.endswith("/chat/completions")]
     assert posted == []

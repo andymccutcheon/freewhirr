@@ -64,9 +64,7 @@ def test_tool_call_check() -> None:
     assert not check(_tool_payload(arguments="{"))
     assert not check(_tool_payload(name="other"))
     assert check(_payload("plain text is fine"))
-    assert not check(
-        {"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": []}}]}
-    )
+    assert not check({"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": []}}]})
 
 
 def test_request_uses_tools_and_names() -> None:
