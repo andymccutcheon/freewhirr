@@ -178,13 +178,17 @@ def env_overrides() -> dict[str, Any]:
     if os.environ.get("FREELOADER_PAID_MODELS"):
         mapping["paid_models"] = os.environ["FREELOADER_PAID_MODELS"]
     if os.environ.get("FREELOADER_INCLUDE_DISCOVERED"):
-        mapping["include_discovered_free"] = _parse_bool(os.environ["FREELOADER_INCLUDE_DISCOVERED"])
+        mapping["include_discovered_free"] = _parse_bool(
+            os.environ["FREELOADER_INCLUDE_DISCOVERED"]
+        )
     if os.environ.get("FREELOADER_MAX_PAID_PER_REQUEST"):
         mapping["max_paid_per_request"] = _parse_optional_float(
             os.environ["FREELOADER_MAX_PAID_PER_REQUEST"]
         )
     if os.environ.get("FREELOADER_MAX_PAID_PER_DAY"):
-        mapping["max_paid_per_day"] = _parse_optional_float(os.environ["FREELOADER_MAX_PAID_PER_DAY"])
+        mapping["max_paid_per_day"] = _parse_optional_float(
+            os.environ["FREELOADER_MAX_PAID_PER_DAY"]
+        )
     if os.environ.get("FREELOADER_MAX_PAID_PER_MONTH"):
         mapping["max_paid_per_month"] = _parse_optional_float(
             os.environ["FREELOADER_MAX_PAID_PER_MONTH"]
@@ -210,7 +214,9 @@ def env_overrides() -> dict[str, Any]:
     if os.environ.get("FREELOADER_BASELINE_MODEL"):
         mapping["baseline_paid_model"] = os.environ["FREELOADER_BASELINE_MODEL"]
     if os.environ.get("FREELOADER_HONOR_REQUESTED_MODEL"):
-        mapping["honor_requested_model"] = _parse_bool(os.environ["FREELOADER_HONOR_REQUESTED_MODEL"])
+        mapping["honor_requested_model"] = _parse_bool(
+            os.environ["FREELOADER_HONOR_REQUESTED_MODEL"]
+        )
     if os.environ.get("FREELOADER_APP_URL"):
         mapping["app_url"] = os.environ["FREELOADER_APP_URL"]
     if os.environ.get("FREELOADER_APP_TITLE"):

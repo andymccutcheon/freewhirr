@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from freeloader.config import FreeloaderConfig, discover_config_path, load_config
 from freeloader.errors import ConfigError
@@ -70,5 +71,5 @@ def test_paid_policy_requires_models() -> None:
 
 
 def test_invalid_share() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         FreeloaderConfig(max_paid_share=1.5)

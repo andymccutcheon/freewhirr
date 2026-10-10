@@ -14,7 +14,6 @@ from freeloader.types import ExhaustionPolicy
 from .conftest import (
     FREE_A,
     FREE_B,
-    OPENROUTER,
     PAID,
     completion_payload,
     make_client,
@@ -173,7 +172,9 @@ def test_quality_check_failsover(tmp_path: Path) -> None:
     mock_completions(
         {
             FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "no")),
-            FREE_B: httpx.Response(200, json=completion_payload(FREE_B, "a longer acceptable answer")),
+            FREE_B: httpx.Response(
+                200, json=completion_payload(FREE_B, "a longer acceptable answer")
+            ),
         }
     )
     client = make_client(tmp_path)

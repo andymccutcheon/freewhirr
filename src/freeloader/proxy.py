@@ -12,8 +12,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from freeloader.errors import (
     BudgetExceeded,
     ConfigError,
-    FreeModelsExhausted,
     FreeloaderError,
+    FreeModelsExhausted,
     PaidFallbackExhausted,
 )
 from freeloader.router import Freeloader
@@ -175,7 +175,11 @@ def _complexity_from(
 
 
 def _http_error(exc: FreeloaderError) -> HTTPException:
-    status = 402 if isinstance(exc, (FreeModelsExhausted, BudgetExceeded, PaidFallbackExhausted)) else 502
+    status = (
+        402
+        if isinstance(exc, (FreeModelsExhausted, BudgetExceeded, PaidFallbackExhausted))
+        else 502
+    )
     return HTTPException(
         status_code=status,
         detail={

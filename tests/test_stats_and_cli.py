@@ -30,7 +30,9 @@ def test_stats_report(tmp_path: Path) -> None:
 
 
 @respx.mock
-def test_cli_chat_and_stats(tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_chat_and_stats(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     mock_models()
     mock_completions({FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "cli-hi"))})
     config = tmp_path / "freeloader.yaml"

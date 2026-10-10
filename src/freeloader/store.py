@@ -162,15 +162,17 @@ class SQLiteStore(StateStore):
                     SUM(CASE WHEN outcome = ? THEN 1 ELSE 0 END) AS paid
                 FROM events
                 """,
-                (Outcome.SUCCESS_FREE.value, Outcome.SUCCESS_PAID.value, Outcome.SUCCESS_PAID.value),
+                (
+                    Outcome.SUCCESS_FREE.value,
+                    Outcome.SUCCESS_PAID.value,
+                    Outcome.SUCCESS_PAID.value,
+                ),
             ).fetchone()
         return int(row["total"] or 0), int(row["paid"] or 0)
 
     def events(self) -> list[dict[str, Any]]:
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM events ORDER BY id ASC"
-            ).fetchall()
+            rows = self._conn.execute("SELECT * FROM events ORDER BY id ASC").fetchall()
         result: list[dict[str, Any]] = []
         for row in rows:
             item = dict(row)

@@ -274,9 +274,7 @@ class Freeloader:
             except FailoverError as exc:
                 last_error = exc
                 if exc.reason == FailReason.QUALITY.value:
-                    attempts.append(
-                        Attempt(model=model_id, reason=exc.reason, message=str(exc))
-                    )
+                    attempts.append(Attempt(model=model_id, reason=exc.reason, message=str(exc)))
                 logger.info("Failing over from %s (%s): %s", model_id, exc.reason, exc)
                 continue
 
@@ -345,9 +343,7 @@ class Freeloader:
             except FailoverError as exc:
                 last_error = exc
                 if exc.reason == FailReason.QUALITY.value:
-                    attempts.append(
-                        Attempt(model=model_id, reason=exc.reason, message=str(exc))
-                    )
+                    attempts.append(Attempt(model=model_id, reason=exc.reason, message=str(exc)))
                 logger.info("Failing over from %s (%s): %s", model_id, exc.reason, exc)
                 continue
 
@@ -833,10 +829,8 @@ class Freeloader:
             )
         if self.config.fetch_generation_cost and usage.cost_usd == 0.0 and raw.get("id"):
             gen = self.transport.generation(str(raw["id"]))
-            try:
-                usage.cost_usd = float(gen.get("total_cost") or gen.get("usage") or 0.0)
-            except (TypeError, ValueError):
-                pass
+            raw_cost = gen.get("total_cost") or gen.get("usage") or 0.0
+            usage.cost_usd = float(raw_cost) if _is_number(raw_cost) else 0.0
 
         prompt_tokens = usage.prompt_tokens or estimate_prompt_tokens(messages, prompt)
         completion_tokens = usage.completion_tokens
@@ -993,6 +987,14 @@ class Freeloader:
             model=model_id,
             retryable=retryable,
         )
+
+
+def _is_number(value: Any) -> bool:
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _request_id() -> str:
