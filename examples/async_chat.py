@@ -2,11 +2,11 @@
 
 import asyncio
 
-from freeloader import Freeloader
+from freewhirr import Freewhirr
 
 
 async def main() -> None:
-    async with Freeloader() as client:
+    async with Freewhirr() as client:
         result = await client.acomplete(
             messages=[{"role": "user", "content": "Name three flightless birds."}]
         )

@@ -1,19 +1,19 @@
-"""Exception hierarchy for freeloader."""
+"""Exception hierarchy for freewhirr."""
 
 from __future__ import annotations
 
 from typing import Any
 
 
-class FreeloaderError(Exception):
-    """Base error for every freeloader failure."""
+class FreewhirrError(Exception):
+    """Base error for every freewhirr failure."""
 
 
-class ConfigError(FreeloaderError):
+class ConfigError(FreewhirrError):
     """Invalid configuration or a missing required setting."""
 
 
-class OpenRouterError(FreeloaderError):
+class OpenRouterError(FreewhirrError):
     """An upstream OpenRouter / HTTP failure that is not a failover signal."""
 
     def __init__(
@@ -30,7 +30,7 @@ class OpenRouterError(FreeloaderError):
         self.model = model
 
 
-class FailoverError(FreeloaderError):
+class FailoverError(FreewhirrError):
     """A single-model attempt failed in a way that should try the next model."""
 
     def __init__(
@@ -64,7 +64,7 @@ class QualityFailed(FailoverError):
         )
 
 
-class FreeModelsExhausted(FreeloaderError):
+class FreeModelsExhausted(FreewhirrError):
     """Every free model failed or was skipped, and paid escalation is not allowed.
 
     This is the `stop` policy outcome, and also the `paid` policy outcome once a
@@ -96,7 +96,7 @@ class BudgetExceeded(FreeModelsExhausted):
         super().__init__(message, attempts=attempts, reason=reason)
 
 
-class PaidFallbackExhausted(FreeloaderError):
+class PaidFallbackExhausted(FreewhirrError):
     """Free models failed and every eligible paid model also failed."""
 
     def __init__(

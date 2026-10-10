@@ -1,4 +1,4 @@
-# Contributing to freeloader
+# Contributing to freewhirr
 
 Thanks for helping keep the free-tier path honest.
 
@@ -30,10 +30,9 @@ format, then pytest. No live OpenRouter calls.
 
 ## Design notes
 
-- Keep the public import name `freeloader`. The PyPI distribution name is
-  `freeloader-llm` because `freeloader` is already taken.
-- Failover belongs in `freeloader.router`. Budget math belongs in
-  `freeloader.budget`. Persistence belongs in `freeloader.store`.
+- Import, CLI, and PyPI name are all `freewhirr`.
+- Failover belongs in `freewhirr.router`. Budget math belongs in
+  `freewhirr.budget`. Persistence belongs in `freewhirr.store`.
 - Prefer adding a test with `respx` over hitting the network.
 - Config is intentionally boring: env vars + YAML/TOML + constructor kwargs.
   Do not introduce a cloud control plane.

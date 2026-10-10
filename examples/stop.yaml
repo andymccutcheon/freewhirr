@@ -1,4 +1,4 @@
-# Never spend money. If every free model fails, freeloader raises and stops.
+# Never spend money. If every free model fails, freewhirr raises and stops.
 exhaustion_policy: stop
 include_discovered_free: true
 # Optional pin / priority list. Discovered $0 models are appended after these.
@@ -8,5 +8,5 @@ model_cache_ttl: 3600
 timeout: 60
 max_retries: 2
 state_backend: sqlite
-# state_path: ~/.freeloader/state.sqlite
+# state_path: ~/.freewhirr/state.sqlite
 baseline_paid_model: openai/gpt-4o-mini

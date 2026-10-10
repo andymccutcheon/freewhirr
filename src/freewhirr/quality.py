@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from freeloader.types import extract_message_content
+from freewhirr.types import extract_message_content
 
 
 class QualityCheck(Protocol):

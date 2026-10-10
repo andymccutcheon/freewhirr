@@ -1,4 +1,4 @@
-from freeloader.cli import main
+from freewhirr.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

@@ -5,13 +5,13 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from freeloader.config import FreeloaderConfig, discover_config_path, load_config
-from freeloader.errors import ConfigError
-from freeloader.types import ExhaustionPolicy
+from freewhirr.config import FreewhirrConfig, discover_config_path, load_config
+from freewhirr.errors import ConfigError
+from freewhirr.types import ExhaustionPolicy
 
 
 def test_yaml_config_and_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    path = tmp_path / "freeloader.yaml"
+    path = tmp_path / "freewhirr.yaml"
     path.write_text(
         """
 exhaustion_policy: paid
@@ -24,7 +24,7 @@ api_key: from-file
         encoding="utf-8",
     )
     monkeypatch.setenv("OPENROUTER_API_KEY", "from-env")
-    monkeypatch.setenv("FREELOADER_EXHAUSTION_POLICY", "stop")
+    monkeypatch.setenv("FREEWHIRR_EXHAUSTION_POLICY", "stop")
     config = load_config(path)
     assert config.api_key == "from-env"
     assert config.exhaustion_policy is ExhaustionPolicy.STOP
@@ -34,7 +34,7 @@ api_key: from-file
 
 
 def test_toml_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    path = tmp_path / "freeloader.toml"
+    path = tmp_path / "freewhirr.toml"
     path.write_text(
         """
 exhaustion_policy = "stop"
@@ -49,27 +49,27 @@ free_models = ["a/free", "b/free"]
 
 
 def test_discover_cwd_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    (tmp_path / "freeloader.yaml").write_text("timeout: 12\n", encoding="utf-8")
+    (tmp_path / "freewhirr.yaml").write_text("timeout: 12\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("FREELOADER_CONFIG", raising=False)
+    monkeypatch.delenv("FREEWHIRR_CONFIG", raising=False)
     found = discover_config_path()
-    assert found == tmp_path / "freeloader.yaml"
+    assert found == tmp_path / "freewhirr.yaml"
 
 
 def test_comma_separated_env_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FREELOADER_FREE_MODELS", "one, two ,three")
-    monkeypatch.setenv("FREELOADER_PAID_MODELS", "paid/one")
+    monkeypatch.setenv("FREEWHIRR_FREE_MODELS", "one, two ,three")
+    monkeypatch.setenv("FREEWHIRR_PAID_MODELS", "paid/one")
     config = load_config()
     assert config.free_models == ["one", "two", "three"]
     assert config.paid_models == ["paid/one"]
 
 
 def test_paid_policy_requires_models() -> None:
-    config = FreeloaderConfig(exhaustion_policy="paid", paid_models=[])
+    config = FreewhirrConfig(exhaustion_policy="paid", paid_models=[])
     with pytest.raises(ConfigError, match="paid_models"):
         config.validate_policy()
 
 
 def test_invalid_share() -> None:
     with pytest.raises(ValidationError):
-        FreeloaderConfig(max_paid_share=1.5)
+        FreewhirrConfig(max_paid_share=1.5)

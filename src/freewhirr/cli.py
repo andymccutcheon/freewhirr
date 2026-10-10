@@ -9,24 +9,24 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from freeloader import __version__
-from freeloader.config import FreeloaderConfig, discover_config_path, load_config
-from freeloader.errors import FreeloaderError
-from freeloader.router import Freeloader
-from freeloader.stats import collect_stats
+from freewhirr import __version__
+from freewhirr.config import FreewhirrConfig, discover_config_path, load_config
+from freewhirr.errors import FreewhirrError
+from freewhirr.router import Freewhirr
+from freewhirr.stats import collect_stats
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="freeloader",
-        description="Use every free LLM before you pay a cent.",
+        prog="freewhirr",
+        description="Spend nothing until you choose to.",
     )
-    parser.add_argument("--version", action="version", version=f"freeloader {__version__}")
+    parser.add_argument("--version", action="version", version=f"freewhirr {__version__}")
     parser.add_argument(
         "--config",
         type=Path,
         default=None,
-        help="YAML or TOML config file (or set FREELOADER_CONFIG).",
+        help="YAML or TOML config file (or set FREEWHIRR_CONFIG).",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -63,15 +63,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _cmd_models(args)
         if args.command == "config":
             return _cmd_config(args)
-    except FreeloaderError as exc:
-        print(f"freeloader: {exc}", file=sys.stderr)
+    except FreewhirrError as exc:
+        print(f"freewhirr: {exc}", file=sys.stderr)
         return 2
     return 1
 
 
-def _load(args: argparse.Namespace, **overrides: Any) -> Freeloader:
+def _load(args: argparse.Namespace, **overrides: Any) -> Freewhirr:
     config = load_config(args.config, overrides=overrides)
-    return Freeloader(config)
+    return Freewhirr(config)
 
 
 def _cmd_chat(args: argparse.Namespace) -> int:
@@ -79,7 +79,7 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     if not prompt:
         prompt = sys.stdin.read().strip()
     if not prompt:
-        print("freeloader: no prompt provided", file=sys.stderr)
+        print("freewhirr: no prompt provided", file=sys.stderr)
         return 2
     messages: list[dict[str, str]] = []
     if args.system:
@@ -108,10 +108,10 @@ def _cmd_chat(args: argparse.Namespace) -> int:
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
-    from freeloader.proxy import run
+    from freewhirr.proxy import run
 
     client = _load(args)
-    print(f"freeloader proxy on http://{args.host}:{args.port}/v1", file=sys.stderr)
+    print(f"freewhirr proxy on http://{args.host}:{args.port}/v1", file=sys.stderr)
     run(host=args.host, port=args.port, client=client)
     return 0
 
@@ -150,7 +150,7 @@ def _cmd_config(args: argparse.Namespace) -> int:
     return 0
 
 
-def _redact(config: FreeloaderConfig) -> dict[str, Any]:
+def _redact(config: FreewhirrConfig) -> dict[str, Any]:
     data = config.model_dump()
     if data.get("api_key"):
         data["api_key"] = "***"

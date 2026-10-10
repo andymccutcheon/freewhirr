@@ -7,9 +7,9 @@ import threading
 import time
 from typing import Any
 
-from freeloader.types import ModelInfo, ModelPricing
+from freewhirr.types import ModelInfo, ModelPricing
 
-logger = logging.getLogger("freeloader")
+logger = logging.getLogger("freewhirr")
 
 
 def _as_float(value: Any) -> float:

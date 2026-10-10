@@ -12,21 +12,21 @@ from typing import Any
 
 import httpx
 
-from freeloader.budget import BudgetGate
-from freeloader.config import FreeloaderConfig, load_config
-from freeloader.errors import (
+from freewhirr.budget import BudgetGate
+from freewhirr.config import FreewhirrConfig, load_config
+from freewhirr.errors import (
     BudgetExceeded,
     FailoverError,
     FreeModelsExhausted,
     PaidFallbackExhausted,
     QualityFailed,
 )
-from freeloader.models import ModelCatalog, merge_model_lists, parse_model
-from freeloader.quality import QualityCheck, coerce_quality_check
-from freeloader.retry import backoff_delays, classify_failure
-from freeloader.store import StateStore, open_store
-from freeloader.transport import OpenRouterTransport, provider_preferences
-from freeloader.types import (
+from freewhirr.models import ModelCatalog, merge_model_lists, parse_model
+from freewhirr.quality import QualityCheck, coerce_quality_check
+from freewhirr.retry import backoff_delays, classify_failure
+from freewhirr.store import StateStore, open_store
+from freewhirr.transport import OpenRouterTransport, provider_preferences
+from freewhirr.types import (
     Attempt,
     ChatResult,
     Complexity,
@@ -37,9 +37,9 @@ from freeloader.types import (
     extract_message_content,
 )
 
-logger = logging.getLogger("freeloader")
+logger = logging.getLogger("freewhirr")
 
-ROUTER_ALIASES = {"", "freeloader", "auto", "free", "openrouter/auto"}
+ROUTER_ALIASES = {"", "freewhirr", "auto", "free", "openrouter/auto"}
 
 
 def estimate_prompt_tokens(messages: list[dict[str, Any]] | None, prompt: str | None) -> int:
@@ -51,7 +51,7 @@ def estimate_prompt_tokens(messages: list[dict[str, Any]] | None, prompt: str | 
 
 
 class Completions:
-    def __init__(self, router: Freeloader) -> None:
+    def __init__(self, router: Freewhirr) -> None:
         self._router = router
 
     def create(
@@ -87,7 +87,7 @@ class Completions:
 
 
 class AsyncCompletions:
-    def __init__(self, router: Freeloader) -> None:
+    def __init__(self, router: Freewhirr) -> None:
         self._router = router
 
     async def create(
@@ -123,28 +123,28 @@ class AsyncCompletions:
 
 
 class ChatNamespace:
-    def __init__(self, router: Freeloader) -> None:
+    def __init__(self, router: Freewhirr) -> None:
         self.completions = Completions(router)
 
 
 class AsyncChatNamespace:
-    def __init__(self, router: Freeloader) -> None:
+    def __init__(self, router: Freewhirr) -> None:
         self.completions = AsyncCompletions(router)
 
 
-class Freeloader:
+class Freewhirr:
     """Sync + async free-first router.
 
     Typical use::
 
-        client = Freeloader()
+        client = Freewhirr()
         result = client.complete(messages=[{"role": "user", "content": "hi"}])
         print(result.content)
     """
 
     def __init__(
         self,
-        config: FreeloaderConfig | None = None,
+        config: FreewhirrConfig | None = None,
         *,
         store: StateStore | None = None,
         transport: OpenRouterTransport | None = None,
@@ -156,7 +156,7 @@ class Freeloader:
         if config is not None and overrides:
             self.config = config.model_copy(update=overrides)
         self.config.validate_policy()
-        logging.getLogger("freeloader").setLevel(self.config.log_level.upper())
+        logging.getLogger("freewhirr").setLevel(self.config.log_level.upper())
         self.store = store or open_store(self.config.state_path, self.config.state_backend)
         self.transport = transport or OpenRouterTransport(
             self.config, client=client, async_client=async_client
@@ -167,7 +167,7 @@ class Freeloader:
         self.achat = AsyncChatNamespace(self)
 
     @classmethod
-    def from_env(cls, **overrides: Any) -> Freeloader:
+    def from_env(cls, **overrides: Any) -> Freewhirr:
         return cls(load_config(overrides=overrides))
 
     def close(self) -> None:
@@ -178,13 +178,13 @@ class Freeloader:
         await self.transport.aclose()
         self.store.close()
 
-    def __enter__(self) -> Freeloader:
+    def __enter__(self) -> Freewhirr:
         return self
 
     def __exit__(self, *exc: object) -> None:
         self.close()
 
-    async def __aenter__(self) -> Freeloader:
+    async def __aenter__(self) -> Freewhirr:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -998,7 +998,7 @@ def _is_number(value: Any) -> bool:
 
 
 def _request_id() -> str:
-    return f"fl-{uuid.uuid4().hex[:16]}"
+    return f"fw-{uuid.uuid4().hex[:16]}"
 
 
 def _complexity_value(complexity: Complexity | str | None) -> str | None:

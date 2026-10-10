@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from freeloader.quality import CallableCheck, JsonSchemaCheck, MinLengthCheck
+from freewhirr.quality import CallableCheck, JsonSchemaCheck, MinLengthCheck
 
 
 def _payload(content: str) -> dict:

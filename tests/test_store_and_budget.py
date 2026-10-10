@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from freeloader.budget import BudgetGate
-from freeloader.config import FreeloaderConfig
-from freeloader.store import JSONStore, SQLiteStore
-from freeloader.types import Complexity, Outcome
+from freewhirr.budget import BudgetGate
+from freewhirr.config import FreewhirrConfig
+from freewhirr.store import JSONStore, SQLiteStore
+from freewhirr.types import Complexity, Outcome
 
 
 def _record(store, *, outcome: str = Outcome.SUCCESS_FREE.value, cost: float = 0.0) -> None:
@@ -39,7 +39,7 @@ def test_sqlite_and_json_counts(tmp_path: Path) -> None:
 
 def test_share_and_complexity_and_daily_cap(tmp_path: Path) -> None:
     store = SQLiteStore(tmp_path / "b.sqlite")
-    config = FreeloaderConfig(
+    config = FreewhirrConfig(
         exhaustion_policy="paid",
         paid_models=["openai/gpt-4o-mini"],
         max_paid_share=0.2,
@@ -63,7 +63,7 @@ def test_share_and_complexity_and_daily_cap(tmp_path: Path) -> None:
     store2 = SQLiteStore(tmp_path / "b2.sqlite")
     _record(store2, outcome=Outcome.SUCCESS_PAID.value, cost=0.9)
     gate2 = BudgetGate(
-        FreeloaderConfig(
+        FreewhirrConfig(
             exhaustion_policy="paid",
             paid_models=["openai/gpt-4o-mini"],
             max_paid_per_day=1.0,

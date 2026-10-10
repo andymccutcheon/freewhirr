@@ -8,15 +8,16 @@ from typing import Any
 
 import httpx
 
-from freeloader.config import FreeloaderConfig
-from freeloader.errors import FailoverError, OpenRouterError
-from freeloader.retry import classify_failure
+from freewhirr.config import FreewhirrConfig
+from freewhirr.errors import FailoverError, OpenRouterError
+from freewhirr.retry import classify_failure
 
 
-def build_headers(config: FreeloaderConfig) -> dict[str, str]:
+def build_headers(config: FreewhirrConfig) -> dict[str, str]:
     headers = {
         "Authorization": f"Bearer {config.require_api_key()}",
         "Content-Type": "application/json",
+        "User-Agent": f"{config.app_title}/0.1.0",
         "HTTP-Referer": config.app_url,
         "X-Title": config.app_title,
         "X-OpenRouter-Title": config.app_title,
@@ -24,7 +25,7 @@ def build_headers(config: FreeloaderConfig) -> dict[str, str]:
     return headers
 
 
-def provider_preferences(config: FreeloaderConfig) -> dict[str, Any] | None:
+def provider_preferences(config: FreewhirrConfig) -> dict[str, Any] | None:
     if config.deny_data_collection:
         return {"data_collection": "deny"}
     return None
@@ -33,7 +34,7 @@ def provider_preferences(config: FreeloaderConfig) -> dict[str, Any] | None:
 class OpenRouterTransport:
     def __init__(
         self,
-        config: FreeloaderConfig,
+        config: FreewhirrConfig,
         *,
         client: httpx.Client | None = None,
         async_client: httpx.AsyncClient | None = None,

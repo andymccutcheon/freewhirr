@@ -1,6 +1,6 @@
 """Fail over when a response does not match a JSON schema."""
 
-from freeloader import Freeloader, JsonSchemaCheck, MinLengthCheck
+from freewhirr import Freewhirr, JsonSchemaCheck, MinLengthCheck
 
 schema = {
     "type": "object",
@@ -8,7 +8,7 @@ schema = {
     "properties": {"answer": {"type": "string"}},
 }
 
-with Freeloader() as client:
+with Freewhirr() as client:
     result = client.complete(
         messages=[
             {

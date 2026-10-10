@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from freeloader.store import StateStore
-from freeloader.types import Outcome
+from freewhirr.store import StateStore
+from freewhirr.types import Outcome
 
 
 @dataclass
@@ -22,7 +22,7 @@ class StatsReport:
 
     def format(self) -> str:
         lines = [
-            "freeloader stats",
+            "freewhirr stats",
             f"  Requests:          {self.requests}",
             f"  Free successes:    {self.free_successes} ({self.free_share:.1%})",
             f"  Paid successes:    {self.paid_successes} ({self.paid_share:.1%})",

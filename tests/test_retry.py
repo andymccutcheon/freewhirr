@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from freeloader.retry import backoff_delays, classify_failure
-from freeloader.types import FailReason
+from freewhirr.retry import backoff_delays, classify_failure
+from freewhirr.types import FailReason
 
 
 def test_classify_rate_limit() -> None:

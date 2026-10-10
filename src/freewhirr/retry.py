@@ -6,7 +6,7 @@ import random
 from collections.abc import Iterator
 from typing import Any
 
-from freeloader.types import FailReason
+from freewhirr.types import FailReason
 
 CONTEXT_MARKERS = (
     "context length",

@@ -9,22 +9,22 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from freeloader.errors import (
+from freewhirr.errors import (
     BudgetExceeded,
     ConfigError,
-    FreeloaderError,
     FreeModelsExhausted,
+    FreewhirrError,
     PaidFallbackExhausted,
 )
-from freeloader.router import Freeloader
-from freeloader.stats import collect_stats
-from freeloader.types import Complexity
+from freewhirr.router import Freewhirr
+from freewhirr.stats import collect_stats
+from freewhirr.types import Complexity
 
 
-def create_app(client: Freeloader | None = None) -> FastAPI:
+def create_app(client: Freewhirr | None = None) -> FastAPI:
     app = FastAPI(
-        title="freeloader",
-        description="Free-first OpenRouter proxy with an OpenAI-compatible API.",
+        title="freewhirr",
+        description="Spend nothing until you choose to.",
         version="0.1.0",
     )
     app.state.client = client
@@ -33,7 +33,7 @@ def create_app(client: Freeloader | None = None) -> FastAPI:
     async def bind_client(request: Request, call_next):  # type: ignore[no-untyped-def]
         if app.state.client is None:
             try:
-                app.state.client = Freeloader.from_env()
+                app.state.client = Freewhirr.from_env()
             except ConfigError as exc:
                 return JSONResponse({"error": {"message": str(exc), "type": "config_error"}}, 500)
         return await call_next(request)
@@ -44,7 +44,7 @@ def create_app(client: Freeloader | None = None) -> FastAPI:
 
     @app.get("/v1/models")
     async def list_models() -> dict[str, Any]:
-        router: Freeloader = app.state.client
+        router: Freewhirr = app.state.client
         await router.arefresh_models()
         free = await router.alist_free_models()
         models = [
@@ -68,22 +68,22 @@ def create_app(client: Freeloader | None = None) -> FastAPI:
             )
         models.insert(
             0,
-            {"id": "freeloader", "object": "model", "owned_by": "freeloader", "created": 0},
+            {"id": "freewhirr", "object": "model", "owned_by": "freewhirr", "created": 0},
         )
         return {"object": "list", "data": models}
 
     @app.get("/v1/stats")
     async def stats() -> dict[str, Any]:
-        router: Freeloader = app.state.client
+        router: Freewhirr = app.state.client
         report = collect_stats(router.store)
         return report.__dict__
 
     @app.post("/v1/chat/completions")
     async def chat_completions(
         request: Request,
-        x_freeloader_complexity: str | None = Header(default=None),
+        x_freewhirr_complexity: str | None = Header(default=None),
     ) -> Any:
-        router: Freeloader = app.state.client
+        router: Freewhirr = app.state.client
         try:
             body = await request.json()
         except json.JSONDecodeError as exc:
@@ -92,7 +92,7 @@ def create_app(client: Freeloader | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="Request body must be a JSON object")
 
         stream = bool(body.pop("stream", False))
-        complexity = _complexity_from(request, x_freeloader_complexity, body)
+        complexity = _complexity_from(request, x_freewhirr_complexity, body)
         model = body.pop("model", None)
         messages = body.pop("messages", None)
         prompt = body.pop("prompt", None)
@@ -119,7 +119,7 @@ def create_app(client: Freeloader | None = None) -> FastAPI:
                 complexity=complexity,
                 extra_body=extra_body,
             )
-        except FreeloaderError as exc:
+        except FreewhirrError as exc:
             raise _http_error(exc) from exc
         payload = result.to_openai()
         payload.setdefault("object", "chat.completion")
@@ -129,7 +129,7 @@ def create_app(client: Freeloader | None = None) -> FastAPI:
 
 
 async def _stream_response(
-    router: Freeloader,
+    router: Freewhirr,
     *,
     messages: Any,
     prompt: Any,
@@ -147,7 +147,7 @@ async def _stream_response(
         ):
             yield f"data: {json.dumps(chunk)}\n\n"
         yield "data: [DONE]\n\n"
-    except FreeloaderError as exc:
+    except FreewhirrError as exc:
         error = {
             "error": {
                 "message": str(exc),
@@ -168,13 +168,13 @@ def _complexity_from(
     query = request.query_params.get("complexity")
     if query:
         return query
-    extra = body.pop("freeloader", None)
+    extra = body.pop("freewhirr", None)
     if isinstance(extra, dict) and extra.get("complexity"):
         return str(extra["complexity"])
     return None
 
 
-def _http_error(exc: FreeloaderError) -> HTTPException:
+def _http_error(exc: FreewhirrError) -> HTTPException:
     status = (
         402
         if isinstance(exc, (FreeModelsExhausted, BudgetExceeded, PaidFallbackExhausted))
@@ -190,7 +190,7 @@ def _http_error(exc: FreeloaderError) -> HTTPException:
     )
 
 
-def run(host: str = "127.0.0.1", port: int = 8787, client: Freeloader | None = None) -> None:
+def run(host: str = "127.0.0.1", port: int = 8787, client: Freewhirr | None = None) -> None:
     import uvicorn
 
     uvicorn.run(create_app(client), host=host, port=port)

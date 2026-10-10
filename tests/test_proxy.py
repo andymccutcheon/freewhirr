@@ -6,8 +6,8 @@ import httpx
 import pytest
 import respx
 
-from freeloader.proxy import create_app
-from freeloader.types import ExhaustionPolicy
+from freewhirr.proxy import create_app
+from freewhirr.types import ExhaustionPolicy
 
 from .conftest import FREE_A, FREE_B, completion_payload, make_client, mock_completions, mock_models
 
@@ -26,7 +26,7 @@ async def test_proxy_chat_and_health(tmp_path: Path) -> None:
         assert (await client.get("/health")).json() == {"status": "ok"}
         response = await client.post(
             "/v1/chat/completions",
-            json={"model": "freeloader", "messages": [{"role": "user", "content": "hi"}]},
+            json={"model": "freewhirr", "messages": [{"role": "user", "content": "hi"}]},
         )
     assert response.status_code == 200
     body = response.json()
@@ -48,7 +48,7 @@ async def test_proxy_lists_models(tmp_path: Path) -> None:
     async with _http(app) as client:
         data = (await client.get("/v1/models")).json()["data"]
     ids = [item["id"] for item in data]
-    assert ids[0] == "freeloader"
+    assert ids[0] == "freewhirr"
     assert FREE_A in ids
     assert "openai/gpt-4o-mini" in ids
 

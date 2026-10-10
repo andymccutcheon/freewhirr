@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from freeloader.models import ModelCatalog, merge_model_lists, parse_model
+from freewhirr.models import ModelCatalog, merge_model_lists, parse_model
 
 
 def test_parse_free_and_paid() -> None:
@@ -35,7 +35,7 @@ def test_catalog_ttl(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     assert catalog.free_ids() == ["a:free"]
     assert not catalog.stale
     now = time.monotonic()
-    monkeypatch.setattr("freeloader.models.time.monotonic", lambda: now + 11)
+    monkeypatch.setattr("freewhirr.models.time.monotonic", lambda: now + 11)
     assert catalog.stale
 
 

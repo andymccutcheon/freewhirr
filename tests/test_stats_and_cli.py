@@ -6,8 +6,8 @@ import httpx
 import pytest
 import respx
 
-from freeloader.cli import main
-from freeloader.stats import collect_stats
+from freewhirr.cli import main
+from freewhirr.stats import collect_stats
 
 from .conftest import FREE_A, completion_payload, make_client, mock_completions, mock_models
 
@@ -35,7 +35,7 @@ def test_cli_chat_and_stats(
 ) -> None:
     mock_models()
     mock_completions({FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "cli-hi"))})
-    config = tmp_path / "freeloader.yaml"
+    config = tmp_path / "freewhirr.yaml"
     config.write_text(
         "\n".join(
             [
@@ -61,7 +61,7 @@ def test_cli_chat_and_stats(
 def test_cli_config_redacts_key(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    config = tmp_path / "freeloader.yaml"
+    config = tmp_path / "freewhirr.yaml"
     config.write_text("api_key: super-secret\n", encoding="utf-8")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     assert main(["--config", str(config), "config"]) == 0

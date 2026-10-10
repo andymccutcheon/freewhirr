@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from freeloader.config import FreeloaderConfig
-from freeloader.store import StateStore
-from freeloader.types import Complexity
+from freewhirr.config import FreewhirrConfig
+from freewhirr.store import StateStore
+from freewhirr.types import Complexity
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class BudgetDecision:
 
 
 class BudgetGate:
-    def __init__(self, config: FreeloaderConfig, store: StateStore) -> None:
+    def __init__(self, config: FreewhirrConfig, store: StateStore) -> None:
         self.config = config
         self.store = store
 

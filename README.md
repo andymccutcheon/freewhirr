@@ -1,11 +1,13 @@
-# freeloader
+# freewhirr
 
-**Use every free LLM before you pay a cent.**
+**Spend nothing until you choose to.**
 
-`freeloader` is a free-first router for [OpenRouter](https://openrouter.ai).
+`freewhirr` is a free-first router for [OpenRouter](https://openrouter.ai).
 It walks an ordered list of **$0 models**, fails over when one of them rate-limits,
 errors, times out, or blows the context window, and only then — if you opt in —
 touches a paid model under budgets you set yourself.
+
+Named after *Whir of Invention*: find the right artifact, stay inside the mana value.
 
 Use it as:
 
@@ -14,12 +16,8 @@ Use it as:
 - a small **CLI**
 
 ```text
-pip install freeloader-llm
+pip install freewhirr
 ```
-
-> **PyPI name.** The import and CLI stay `freeloader`. The distribution name is
-> `freeloader-llm` because [`freeloader`](https://pypi.org/project/freeloader/)
-> is already taken by an unrelated Terraform CLI.
 
 ## Why
 
@@ -28,7 +26,7 @@ they are also flaky: 429s, provider outages, tiny context windows. Paying humans
 usually hard-code one cheap paid model and leak money on work a free model
 would have done.
 
-`freeloader` flips that default.
+`freewhirr` flips that default.
 
 | Policy | What happens when free models are exhausted |
 | --- | --- |
@@ -38,14 +36,14 @@ would have done.
 ## 30-second quickstart
 
 ```bash
-python -m pip install freeloader-llm
+python -m pip install freewhirr
 export OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 ```python
-from freeloader import Freeloader
+from freewhirr import Freewhirr
 
-with Freeloader() as client:
+with Freewhirr() as client:
     result = client.complete(
         messages=[{"role": "user", "content": "Explain vector clocks in one paragraph."}]
     )
@@ -56,7 +54,7 @@ with Freeloader() as client:
 Same thing from the CLI:
 
 ```bash
-freeloader chat "Explain vector clocks in one paragraph."
+freewhirr chat "Explain vector clocks in one paragraph."
 ```
 
 The API key is read from `OPENROUTER_API_KEY`. There is no other vendor lock-in:
@@ -74,9 +72,9 @@ include_discovered_free: true
 ```
 
 ```python
-from freeloader import Freeloader, FreeModelsExhausted, load_config
+from freewhirr import Freewhirr, FreeModelsExhausted, load_config
 
-client = Freeloader(load_config("examples/stop.yaml"))
+client = Freewhirr(load_config("examples/stop.yaml"))
 try:
     client.complete(messages=[{"role": "user", "content": "hi"}])
 except FreeModelsExhausted as exc:
@@ -119,10 +117,10 @@ the machine that ran the request. Nothing is phoned home.
 
 ## OpenAI-compatible proxy
 
-Any language that can speak the OpenAI HTTP API can sit behind freeloader.
+Any language that can speak the OpenAI HTTP API can sit behind freewhirr.
 
 ```bash
-freeloader --config examples/stop.yaml serve --port 8787
+freewhirr --config examples/stop.yaml serve --port 8787
 ```
 
 ```python
@@ -131,7 +129,7 @@ from openai import OpenAI
 
 client = OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="not-used")
 response = client.chat.completions.create(
-    model="freeloader",
+    model="freewhirr",
     messages=[{"role": "user", "content": "Give me a one-line haiku about buses."}],
 )
 print(response.choices[0].message.content)
@@ -141,7 +139,7 @@ The proxy:
 
 - accepts `POST /v1/chat/completions` (including SSE streaming)
 - lists the current free catalog at `GET /v1/models`
-- honors `X-Freeloader-Complexity: high` for the paid-complexity gate
+- honors `X-Freewhirr-Complexity: high` for the paid-complexity gate
 - ignores the client's `model` field unless you set `honor_requested_model: true`
   (so a hardcoded `gpt-4o-mini` in an app cannot accidentally skip the free list)
 
@@ -153,8 +151,8 @@ the catalog). Compare that to an all-paid baseline (`baseline_paid_model`,
 default `openai/gpt-4o-mini`):
 
 ```bash
-$ freeloader stats
-freeloader stats
+$ freewhirr stats
+freewhirr stats
   Requests:          142
   Free successes:    131 (94.2%)
   Paid successes:    8 (5.8%)
@@ -176,9 +174,9 @@ set:
 deny_data_collection: true
 ```
 
-or `FREELOADER_DENY_DATA_COLLECTION=true`.
+or `FREEWHIRR_DENY_DATA_COLLECTION=true`.
 
-freeloader then sends OpenRouter's provider preference
+freewhirr then sends OpenRouter's provider preference
 `{"data_collection": "deny"}` on every completion. OpenRouter will only route
 to providers that do not collect prompts for training.
 
@@ -212,49 +210,49 @@ Lookup order: **defaults < YAML/TOML file < environment variables < constructor 
 
 Files, first match wins:
 
-- `FREELOADER_CONFIG`
-- `./freeloader.yaml`, `./freeloader.yml`, `./freeloader.toml`
-- `$XDG_CONFIG_HOME/freeloader/` (same filenames)
+- `FREEWHIRR_CONFIG`
+- `./freewhirr.yaml`, `./freewhirr.yml`, `./freewhirr.toml`
+- `$XDG_CONFIG_HOME/freewhirr/` (same filenames)
 
 | Setting | Env var | Default |
 | --- | --- | --- |
 | API key | `OPENROUTER_API_KEY` | (required) |
 | Base URL | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
-| Policy | `FREELOADER_EXHAUSTION_POLICY` | `stop` |
-| Free model pin list | `FREELOADER_FREE_MODELS` | (discover) |
-| Paid model list | `FREELOADER_PAID_MODELS` | `[]` |
-| Merge discovered free models | `FREELOADER_INCLUDE_DISCOVERED` | `true` |
-| Max $ / request | `FREELOADER_MAX_PAID_PER_REQUEST` | unset |
-| Max $ / day | `FREELOADER_MAX_PAID_PER_DAY` | unset |
-| Max $ / month | `FREELOADER_MAX_PAID_PER_MONTH` | unset |
-| Max paid share (0–1) | `FREELOADER_MAX_PAID_SHARE` | unset |
-| Paid only if `complexity=high` | `FREELOADER_PAID_ONLY_HIGH_COMPLEXITY` | `false` |
-| `data_collection: deny` | `FREELOADER_DENY_DATA_COLLECTION` | `false` |
-| Catalog TTL seconds | `FREELOADER_MODEL_CACHE_TTL` | `3600` |
-| HTTP timeout | `FREELOADER_TIMEOUT` | `60` |
-| Extra retries / model | `FREELOADER_MAX_RETRIES` | `2` |
-| Ledger path | `FREELOADER_STATE_PATH` | `~/.freeloader/state.sqlite` |
-| Ledger backend | `FREELOADER_STATE_BACKEND` | `sqlite` (`json` also works) |
-| Savings baseline model | `FREELOADER_BASELINE_MODEL` | `openai/gpt-4o-mini` |
+| Policy | `FREEWHIRR_EXHAUSTION_POLICY` | `stop` |
+| Free model pin list | `FREEWHIRR_FREE_MODELS` | (discover) |
+| Paid model list | `FREEWHIRR_PAID_MODELS` | `[]` |
+| Merge discovered free models | `FREEWHIRR_INCLUDE_DISCOVERED` | `true` |
+| Max $ / request | `FREEWHIRR_MAX_PAID_PER_REQUEST` | unset |
+| Max $ / day | `FREEWHIRR_MAX_PAID_PER_DAY` | unset |
+| Max $ / month | `FREEWHIRR_MAX_PAID_PER_MONTH` | unset |
+| Max paid share (0–1) | `FREEWHIRR_MAX_PAID_SHARE` | unset |
+| Paid only if `complexity=high` | `FREEWHIRR_PAID_ONLY_HIGH_COMPLEXITY` | `false` |
+| `data_collection: deny` | `FREEWHIRR_DENY_DATA_COLLECTION` | `false` |
+| Catalog TTL seconds | `FREEWHIRR_MODEL_CACHE_TTL` | `3600` |
+| HTTP timeout | `FREEWHIRR_TIMEOUT` | `60` |
+| Extra retries / model | `FREEWHIRR_MAX_RETRIES` | `2` |
+| Ledger path | `FREEWHIRR_STATE_PATH` | `~/.freewhirr/state.sqlite` |
+| Ledger backend | `FREEWHIRR_STATE_BACKEND` | `sqlite` (`json` also works) |
+| Savings baseline model | `FREEWHIRR_BASELINE_MODEL` | `openai/gpt-4o-mini` |
 
 ```bash
-freeloader config          # resolved settings, key redacted
-freeloader models          # free list the next call would walk
+freewhirr config          # resolved settings, key redacted
+freewhirr models          # free list the next call would walk
 ```
 
 ## Library surface
 
 ```python
-from freeloader import (
-    Freeloader,
-    FreeloaderConfig,
+from freewhirr import (
+    Freewhirr,
+    FreewhirrConfig,
     ExhaustionPolicy,
     MinLengthCheck,
     JsonSchemaCheck,
 )
 
-client = Freeloader(
-    FreeloaderConfig(
+client = Freewhirr(
+    FreewhirrConfig(
         api_key="...",
         exhaustion_policy=ExhaustionPolicy.STOP,
     )
@@ -278,10 +276,6 @@ client.chat.completions.create(messages=[...])
 **Does this make live OpenRouter calls in CI?**
 No. Tests mock HTTP with `respx`. You can run `pytest` without a key.
 
-**Is the PyPI name `freeloader`?**
-No. Install `freeloader-llm`. Import `freeloader`. The upstream name was
-already occupied.
-
 **Will `deny_data_collection` break free models?**
 Often, yes. Most free endpoints collect prompts. The flag is an explicit
 privacy/availability tradeoff, not a silent default.
@@ -293,7 +287,7 @@ tried first.
 
 **How is "money saved" computed?**
 Each success stores the actual (or estimated) cost and a baseline cost for the
-same token counts on `baseline_paid_model`. `freeloader stats` subtracts
+same token counts on `baseline_paid_model`. `freewhirr stats` subtracts
 those. If you never configured a paid baseline in the catalog, a GPT-4o-mini
 price is used so the number is still in the right order of magnitude.
 

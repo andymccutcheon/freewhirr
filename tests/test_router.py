@@ -7,9 +7,9 @@ import httpx
 import pytest
 import respx
 
-from freeloader.errors import BudgetExceeded, FreeModelsExhausted, PaidFallbackExhausted
-from freeloader.quality import MinLengthCheck
-from freeloader.types import ExhaustionPolicy
+from freewhirr.errors import BudgetExceeded, FreeModelsExhausted, PaidFallbackExhausted
+from freewhirr.quality import MinLengthCheck
+from freewhirr.types import ExhaustionPolicy
 
 from .conftest import (
     FREE_A,
@@ -199,6 +199,12 @@ def test_privacy_sets_data_collection_deny(tmp_path: Path) -> None:
     assert posted
     assert posted[0]["provider"] == {"data_collection": "deny"}
     assert posted[0]["model"] == FREE_A
+    headers = [
+        call.request.headers
+        for call in respx.calls
+        if call.request.url.path.endswith("/chat/completions")
+    ]
+    assert headers[0]["user-agent"].startswith("freewhirr/")
 
 
 @respx.mock

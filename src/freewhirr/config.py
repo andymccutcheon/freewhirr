@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from freeloader.errors import ConfigError
-from freeloader.types import ExhaustionPolicy
+from freewhirr.errors import ConfigError
+from freewhirr.types import ExhaustionPolicy
 
 try:
     import tomllib
@@ -18,16 +18,16 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10
 
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_APP_URL = "https://github.com/andymccutcheon/freeloader"
-DEFAULT_APP_TITLE = "freeloader"
+DEFAULT_APP_URL = "https://github.com/andymccutcheon/freewhirr"
+DEFAULT_APP_TITLE = "freewhirr"
 CONFIG_FILENAMES = (
-    "freeloader.yaml",
-    "freeloader.yml",
-    "freeloader.toml",
+    "freewhirr.yaml",
+    "freewhirr.yml",
+    "freewhirr.toml",
 )
 
 
-class FreeloaderConfig(BaseModel):
+class FreewhirrConfig(BaseModel):
     """All knobs. Nothing here locks you into a vendor besides OpenRouter itself."""
 
     model_config = ConfigDict(extra="ignore", validate_assignment=True)
@@ -49,7 +49,7 @@ class FreeloaderConfig(BaseModel):
     max_retries: int = 2
     retry_base_delay: float = 0.5
     retry_cap: float = 8.0
-    state_path: Path = Field(default_factory=lambda: Path.home() / ".freeloader" / "state.sqlite")
+    state_path: Path = Field(default_factory=lambda: Path.home() / ".freewhirr" / "state.sqlite")
     state_backend: str = "sqlite"
     baseline_paid_model: str = "openai/gpt-4o-mini"
     honor_requested_model: bool = False
@@ -79,7 +79,7 @@ class FreeloaderConfig(BaseModel):
     @classmethod
     def _expand_path(cls, value: Any) -> Any:
         if value is None or value == "":
-            return Path.home() / ".freeloader" / "state.sqlite"
+            return Path.home() / ".freewhirr" / "state.sqlite"
         return Path(value).expanduser()
 
     @field_validator("state_backend")
@@ -146,7 +146,7 @@ def _read_config_file(path: Path) -> dict[str, Any]:
 def discover_config_path(explicit: str | Path | None = None) -> Path | None:
     if explicit:
         return Path(explicit).expanduser()
-    env_path = os.environ.get("FREELOADER_CONFIG")
+    env_path = os.environ.get("FREEWHIRR_CONFIG")
     if env_path:
         return Path(env_path).expanduser()
     cwd = Path.cwd()
@@ -156,7 +156,7 @@ def discover_config_path(explicit: str | Path | None = None) -> Path | None:
             return candidate
     config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     for name in CONFIG_FILENAMES:
-        candidate = config_home / "freeloader" / name
+        candidate = config_home / "freewhirr" / name
         if candidate.is_file():
             return candidate
     return None
@@ -170,59 +170,57 @@ def env_overrides() -> dict[str, Any]:
         mapping["api_key"] = key
     if os.environ.get("OPENROUTER_BASE_URL"):
         mapping["base_url"] = os.environ["OPENROUTER_BASE_URL"].rstrip("/")
-    policy = os.environ.get("FREELOADER_EXHAUSTION_POLICY") or os.environ.get("FREELOADER_POLICY")
+    policy = os.environ.get("FREEWHIRR_EXHAUSTION_POLICY") or os.environ.get("FREEWHIRR_POLICY")
     if policy:
         mapping["exhaustion_policy"] = policy
-    if os.environ.get("FREELOADER_FREE_MODELS"):
-        mapping["free_models"] = os.environ["FREELOADER_FREE_MODELS"]
-    if os.environ.get("FREELOADER_PAID_MODELS"):
-        mapping["paid_models"] = os.environ["FREELOADER_PAID_MODELS"]
-    if os.environ.get("FREELOADER_INCLUDE_DISCOVERED"):
-        mapping["include_discovered_free"] = _parse_bool(
-            os.environ["FREELOADER_INCLUDE_DISCOVERED"]
-        )
-    if os.environ.get("FREELOADER_MAX_PAID_PER_REQUEST"):
+    if os.environ.get("FREEWHIRR_FREE_MODELS"):
+        mapping["free_models"] = os.environ["FREEWHIRR_FREE_MODELS"]
+    if os.environ.get("FREEWHIRR_PAID_MODELS"):
+        mapping["paid_models"] = os.environ["FREEWHIRR_PAID_MODELS"]
+    if os.environ.get("FREEWHIRR_INCLUDE_DISCOVERED"):
+        mapping["include_discovered_free"] = _parse_bool(os.environ["FREEWHIRR_INCLUDE_DISCOVERED"])
+    if os.environ.get("FREEWHIRR_MAX_PAID_PER_REQUEST"):
         mapping["max_paid_per_request"] = _parse_optional_float(
-            os.environ["FREELOADER_MAX_PAID_PER_REQUEST"]
+            os.environ["FREEWHIRR_MAX_PAID_PER_REQUEST"]
         )
-    if os.environ.get("FREELOADER_MAX_PAID_PER_DAY"):
+    if os.environ.get("FREEWHIRR_MAX_PAID_PER_DAY"):
         mapping["max_paid_per_day"] = _parse_optional_float(
-            os.environ["FREELOADER_MAX_PAID_PER_DAY"]
+            os.environ["FREEWHIRR_MAX_PAID_PER_DAY"]
         )
-    if os.environ.get("FREELOADER_MAX_PAID_PER_MONTH"):
+    if os.environ.get("FREEWHIRR_MAX_PAID_PER_MONTH"):
         mapping["max_paid_per_month"] = _parse_optional_float(
-            os.environ["FREELOADER_MAX_PAID_PER_MONTH"]
+            os.environ["FREEWHIRR_MAX_PAID_PER_MONTH"]
         )
-    if os.environ.get("FREELOADER_MAX_PAID_SHARE"):
-        mapping["max_paid_share"] = _parse_optional_float(os.environ["FREELOADER_MAX_PAID_SHARE"])
-    if os.environ.get("FREELOADER_PAID_ONLY_HIGH_COMPLEXITY"):
+    if os.environ.get("FREEWHIRR_MAX_PAID_SHARE"):
+        mapping["max_paid_share"] = _parse_optional_float(os.environ["FREEWHIRR_MAX_PAID_SHARE"])
+    if os.environ.get("FREEWHIRR_PAID_ONLY_HIGH_COMPLEXITY"):
         mapping["paid_only_high_complexity"] = _parse_bool(
-            os.environ["FREELOADER_PAID_ONLY_HIGH_COMPLEXITY"]
+            os.environ["FREEWHIRR_PAID_ONLY_HIGH_COMPLEXITY"]
         )
-    if os.environ.get("FREELOADER_DENY_DATA_COLLECTION"):
-        mapping["deny_data_collection"] = _parse_bool(os.environ["FREELOADER_DENY_DATA_COLLECTION"])
-    if os.environ.get("FREELOADER_MODEL_CACHE_TTL"):
-        mapping["model_cache_ttl"] = float(os.environ["FREELOADER_MODEL_CACHE_TTL"])
-    if os.environ.get("FREELOADER_TIMEOUT"):
-        mapping["timeout"] = float(os.environ["FREELOADER_TIMEOUT"])
-    if os.environ.get("FREELOADER_MAX_RETRIES"):
-        mapping["max_retries"] = int(os.environ["FREELOADER_MAX_RETRIES"])
-    if os.environ.get("FREELOADER_STATE_PATH"):
-        mapping["state_path"] = os.environ["FREELOADER_STATE_PATH"]
-    if os.environ.get("FREELOADER_STATE_BACKEND"):
-        mapping["state_backend"] = os.environ["FREELOADER_STATE_BACKEND"]
-    if os.environ.get("FREELOADER_BASELINE_MODEL"):
-        mapping["baseline_paid_model"] = os.environ["FREELOADER_BASELINE_MODEL"]
-    if os.environ.get("FREELOADER_HONOR_REQUESTED_MODEL"):
+    if os.environ.get("FREEWHIRR_DENY_DATA_COLLECTION"):
+        mapping["deny_data_collection"] = _parse_bool(os.environ["FREEWHIRR_DENY_DATA_COLLECTION"])
+    if os.environ.get("FREEWHIRR_MODEL_CACHE_TTL"):
+        mapping["model_cache_ttl"] = float(os.environ["FREEWHIRR_MODEL_CACHE_TTL"])
+    if os.environ.get("FREEWHIRR_TIMEOUT"):
+        mapping["timeout"] = float(os.environ["FREEWHIRR_TIMEOUT"])
+    if os.environ.get("FREEWHIRR_MAX_RETRIES"):
+        mapping["max_retries"] = int(os.environ["FREEWHIRR_MAX_RETRIES"])
+    if os.environ.get("FREEWHIRR_STATE_PATH"):
+        mapping["state_path"] = os.environ["FREEWHIRR_STATE_PATH"]
+    if os.environ.get("FREEWHIRR_STATE_BACKEND"):
+        mapping["state_backend"] = os.environ["FREEWHIRR_STATE_BACKEND"]
+    if os.environ.get("FREEWHIRR_BASELINE_MODEL"):
+        mapping["baseline_paid_model"] = os.environ["FREEWHIRR_BASELINE_MODEL"]
+    if os.environ.get("FREEWHIRR_HONOR_REQUESTED_MODEL"):
         mapping["honor_requested_model"] = _parse_bool(
-            os.environ["FREELOADER_HONOR_REQUESTED_MODEL"]
+            os.environ["FREEWHIRR_HONOR_REQUESTED_MODEL"]
         )
-    if os.environ.get("FREELOADER_APP_URL"):
-        mapping["app_url"] = os.environ["FREELOADER_APP_URL"]
-    if os.environ.get("FREELOADER_APP_TITLE"):
-        mapping["app_title"] = os.environ["FREELOADER_APP_TITLE"]
-    if os.environ.get("FREELOADER_LOG_LEVEL"):
-        mapping["log_level"] = os.environ["FREELOADER_LOG_LEVEL"]
+    if os.environ.get("FREEWHIRR_APP_URL"):
+        mapping["app_url"] = os.environ["FREEWHIRR_APP_URL"]
+    if os.environ.get("FREEWHIRR_APP_TITLE"):
+        mapping["app_title"] = os.environ["FREEWHIRR_APP_TITLE"]
+    if os.environ.get("FREEWHIRR_LOG_LEVEL"):
+        mapping["log_level"] = os.environ["FREEWHIRR_LOG_LEVEL"]
     return mapping
 
 
@@ -230,7 +228,7 @@ def load_config(
     path: str | Path | None = None,
     *,
     overrides: dict[str, Any] | None = None,
-) -> FreeloaderConfig:
+) -> FreewhirrConfig:
     """Merge defaults < file < env < explicit overrides. Env always wins over the file."""
     data: dict[str, Any] = {}
     found = discover_config_path(path)
@@ -240,7 +238,7 @@ def load_config(
     if overrides:
         data.update({key: value for key, value in overrides.items() if value is not None})
     try:
-        config = FreeloaderConfig.model_validate(data)
+        config = FreewhirrConfig.model_validate(data)
     except Exception as exc:  # pydantic ValidationError
         raise ConfigError(str(exc)) from exc
     return config

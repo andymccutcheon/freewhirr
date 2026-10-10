@@ -30,10 +30,10 @@ dist/
 *.sqlite
 *.sqlite3
 *.db
-.freeloader/
-freeloader.local.yaml
-freeloader.local.yml
-freeloader.local.toml
+.freewhirr/
+freewhirr.local.yaml
+freewhirr.local.yml
+freewhirr.local.toml
 
 # Editors / OS
 .idea/

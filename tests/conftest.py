@@ -9,8 +9,8 @@ import httpx
 import pytest
 import respx
 
-from freeloader.config import FreeloaderConfig
-from freeloader.router import Freeloader
+from freewhirr.config import FreewhirrConfig
+from freewhirr.router import Freewhirr
 
 OPENROUTER = "https://openrouter.ai/api/v1"
 
@@ -76,7 +76,7 @@ def completion_payload(
     }
 
 
-def make_config(tmp_path: Path, **updates: Any) -> FreeloaderConfig:
+def make_config(tmp_path: Path, **updates: Any) -> FreewhirrConfig:
     defaults: dict[str, Any] = {
         "api_key": "test-key",
         "state_path": tmp_path / "state.sqlite",
@@ -91,15 +91,15 @@ def make_config(tmp_path: Path, **updates: Any) -> FreeloaderConfig:
         "log_level": "WARNING",
     }
     defaults.update(updates)
-    return FreeloaderConfig.model_validate(defaults)
+    return FreewhirrConfig.model_validate(defaults)
 
 
-def make_client(tmp_path: Path, **updates: Any) -> Freeloader:
-    return Freeloader(make_config(tmp_path, **updates))
+def make_client(tmp_path: Path, **updates: Any) -> Freewhirr:
+    return Freewhirr(make_config(tmp_path, **updates))
 
 
 @pytest.fixture
-def router(tmp_path: Path) -> Freeloader:
+def router(tmp_path: Path) -> Freewhirr:
     return make_client(tmp_path)
 
 

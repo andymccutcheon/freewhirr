@@ -1,20 +1,20 @@
-"""freeloader — use every free LLM before you pay a cent."""
+"""freewhirr — spend nothing until you choose to."""
 
-from freeloader.config import FreeloaderConfig, load_config
-from freeloader.errors import (
+from freewhirr.config import FreewhirrConfig, load_config
+from freewhirr.errors import (
     BudgetExceeded,
     ConfigError,
     FailoverError,
-    FreeloaderError,
     FreeModelsExhausted,
+    FreewhirrError,
     OpenRouterError,
     PaidFallbackExhausted,
     QualityFailed,
 )
-from freeloader.quality import CallableCheck, JsonSchemaCheck, MinLengthCheck, QualityCheck
-from freeloader.router import Freeloader
-from freeloader.stats import StatsReport, collect_stats
-from freeloader.types import ChatResult, Complexity, ExhaustionPolicy, Usage
+from freewhirr.quality import CallableCheck, JsonSchemaCheck, MinLengthCheck, QualityCheck
+from freewhirr.router import Freewhirr
+from freewhirr.stats import StatsReport, collect_stats
+from freewhirr.types import ChatResult, Complexity, ExhaustionPolicy, Usage
 
 __version__ = "0.1.0"
 
@@ -27,9 +27,9 @@ __all__ = [
     "ExhaustionPolicy",
     "FailoverError",
     "FreeModelsExhausted",
-    "Freeloader",
-    "FreeloaderConfig",
-    "FreeloaderError",
+    "Freewhirr",
+    "FreewhirrConfig",
+    "FreewhirrError",
     "JsonSchemaCheck",
     "MinLengthCheck",
     "OpenRouterError",

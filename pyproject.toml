@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "freeloader-llm"
+name = "freewhirr"
 version = "0.1.0"
-description = "Use every free LLM before you pay a cent."
+description = "Spend nothing until you choose to."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -50,18 +50,18 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/andymccutcheon/freeloader"
-Repository = "https://github.com/andymccutcheon/freeloader"
-Issues = "https://github.com/andymccutcheon/freeloader/issues"
+Homepage = "https://github.com/andymccutcheon/freewhirr"
+Repository = "https://github.com/andymccutcheon/freewhirr"
+Issues = "https://github.com/andymccutcheon/freewhirr/issues"
 
 [project.scripts]
-freeloader = "freeloader.cli:main"
+freewhirr = "freewhirr.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-freeloader = ["py.typed"]
+freewhirr = ["py.typed"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -78,4 +78,4 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["B008"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["freeloader"]
+known-first-party = ["freewhirr"]
