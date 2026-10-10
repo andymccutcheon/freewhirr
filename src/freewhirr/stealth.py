@@ -3,9 +3,12 @@
 Live catalog (fetched 2026-10-10 from https://openrouter.ai/api/v1/models):
 458 models, 19 free. Each listing has id, name, canonical_slug, description,
 context_length, created (unix), pricing.{prompt,completion,request},
-supported_parameters, architecture, top_provider. No current listing used
-the words stealth, cloaked, or logging. The openrouter/ namespace was
-routers (auto, free, fusion, pareto-code, bodybuilder), not stealth drops.
+supported_parameters, architecture, top_provider, plus hugging_face_id,
+knowledge_cutoff, expiration_date, reasoning, default_parameters. No
+current listing used the words stealth, cloaked, or logging. The
+openrouter/ namespace was routers (auto, auto-beta, free, fusion,
+pareto-code, bodybuilder), not stealth drops. Two named free models now
+use 256000 context, so that length is only a weak extra signal.
 
 Historical stealth listings (openrouter/horizon-alpha, horizon-beta) used
 that namespace, a codename instead of a lab, 256000 context, and copy
@@ -60,7 +63,8 @@ COMMON_CONTEXT = {
     1048576,
     2000000,
 }
-# Horizon Alpha/Beta advertised 256000 — unusual vs today's 262144 free cluster.
+# Horizon Alpha/Beta advertised 256000. Named free models now also use it,
+# so this is only a weak extra signal, not a standalone stealth flag.
 HISTORICAL_STEALTH_CONTEXT = {256000}
 
 

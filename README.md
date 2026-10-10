@@ -436,15 +436,21 @@ OpenRouter's [Stealth Program EULA](https://openrouter.ai/terms/stealth).
 stealth model.** `promote_stealth` is off by default for that reason.
 
 Live catalog snapshot (2026-10-10, `GET https://openrouter.ai/api/v1/models`):
-458 models, 19 free. Listings expose `id`, `name`, `canonical_slug`,
-`description`, `context_length`, `created`, `pricing`,
-`supported_parameters`, `architecture`. **No current listing** used the
-words stealth, cloaked, or logging. The `openrouter/` namespace was routers
-(`auto`, `free`, `fusion`, `pareto-code`, `bodybuilder`), not stealth drops.
-Historical stealth models such as `openrouter/horizon-alpha` and
-`openrouter/horizon-beta` used that namespace, a codename, a 256000 context
-window, and copy that called the model cloaked and warned that prompts are
-logged. Heuristics target that shape so the next drop is caught.
+458 models, 19 free (`total_count` matches). Listings expose `id`, `name`,
+`canonical_slug`, `description`, `context_length`, `created`, `pricing`,
+`supported_parameters`, `architecture`, plus `top_provider`,
+`hugging_face_id`, `knowledge_cutoff`, `expiration_date`, `reasoning`,
+and `default_parameters`. **No current listing** used the words stealth,
+cloaked, or logging. The `openrouter/` namespace was routers (`auto`,
+`auto-beta`, `free`, `fusion`, `pareto-code`, `bodybuilder`), not stealth
+drops. Two named free models now advertise a 256000 context
+(`cohere/north-mini-code:free`,
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`), so that length is
+only a weak signal. Historical stealth models such as
+`openrouter/horizon-alpha` and `openrouter/horizon-beta` used the
+`openrouter/` namespace, a codename, 256000 context, and copy that called
+the model cloaked and warned that prompts are logged. Heuristics target
+that shape so the next drop is caught.
 
 ```bash
 freewhirr models --new        # $0 models first seen since the last snapshot
