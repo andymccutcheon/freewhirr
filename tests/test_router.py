@@ -9,7 +9,7 @@ import respx
 
 from freewhirr.errors import BudgetExceeded, FreeModelsExhausted, PaidFallbackExhausted
 from freewhirr.quality import MinLengthCheck
-from freewhirr.types import ExhaustionPolicy
+from freewhirr.types import ExhaustionPolicy, ModelInfo
 
 from .conftest import (
     FREE_A,
@@ -33,6 +33,57 @@ def test_uses_first_free_model(tmp_path: Path) -> None:
     assert result.paid is False
     assert result.cost_usd == 0.0
     assert result.models_tried == [FREE_A]
+
+
+def test_model_queue_preserves_pinned_then_discovered_order(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path, free_models=[FREE_B, "pinned/unknown:free"], include_discovered_free=True
+    )
+    client.catalog.replace(
+        [ModelInfo(id=FREE_A), ModelInfo(id=FREE_B), ModelInfo(id="discovered/third:free")]
+    )
+    assert client._model_queue(requested=None) == [
+        (FREE_B, False),
+        ("pinned/unknown:free", False),
+        (FREE_A, False),
+        ("discovered/third:free", False),
+    ]
+
+
+def test_model_queue_promotes_stealth_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = make_client(tmp_path, free_models=[FREE_A, FREE_B], promote_stealth=True)
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    monkeypatch.setattr(
+        client,
+        "_stealth_report",
+        lambda model: type("Report", (), {"is_stealth": model == FREE_B})(),
+    )
+    assert client._model_queue(requested=None) == [(FREE_B, False), (FREE_A, False)]
+
+
+def test_model_queue_honors_requested_model_first(tmp_path: Path) -> None:
+    client = make_client(tmp_path, free_models=[FREE_A, FREE_B], honor_requested_model=True)
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    assert client._model_queue(requested=FREE_B) == [(FREE_B, False), (FREE_A, False)]
+
+
+@pytest.mark.parametrize("complexity", ["low", "normal", "high", None])
+@respx.mock
+def test_complexity_does_not_change_baseline_model_order(
+    tmp_path: Path, complexity: str | None
+) -> None:
+    mock_models()
+    mock_completions(
+        {
+            FREE_A: httpx.Response(500, json={"error": {"message": "down"}}),
+            FREE_B: httpx.Response(200, json=completion_payload(FREE_B, "ok")),
+        }
+    )
+    client = make_client(tmp_path, free_models=[FREE_A, FREE_B])
+    result = client.complete(messages=[{"role": "user", "content": "hi"}], complexity=complexity)
+    assert result.models_tried == [FREE_A, FREE_B]
 
 
 @respx.mock
