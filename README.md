@@ -89,7 +89,7 @@ except FreeModelsExhausted as exc:
 exhaustion_policy: paid
 include_discovered_free: true
 strong_free_models:
-  - meta-llama/llama-3.2-3b-instruct:free
+  - google/gemma-4-31b-it:free
 paid_models:
   - openai/gpt-4o-mini
 max_paid_per_request: 0.05

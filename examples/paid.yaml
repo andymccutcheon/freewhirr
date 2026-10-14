@@ -2,6 +2,8 @@
 # inside explicit dollar and share guardrails.
 exhaustion_policy: paid
 include_discovered_free: true
+strong_free_models:
+  - google/gemma-4-31b-it:free
 free_models: []
 paid_models:
   - openai/gpt-4o-mini
