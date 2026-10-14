@@ -784,7 +784,9 @@ class Freewhirr:
         free = self._ordered_free_ids()
         requested_first: str | None = None
         if self.config.honor_requested_model and requested and requested not in ROUTER_ALIASES:
-            if requested in free:
+            if requested in self.config.paid_models:
+                logger.info("Ignoring requested model %s: configured as paid", requested)
+            elif requested in free:
                 free = [requested, *[item for item in free if item != requested]]
                 requested_first = requested
             else:
@@ -793,12 +795,12 @@ class Freewhirr:
                     reason = "not in catalogue"
                 elif not info.is_free:
                     reason = "not free"
-                elif _discovered_ineligibility_reason(info):
-                    reason = "filtered"
+                elif eligibility_reason := _discovered_ineligibility_reason(info):
+                    reason = eligibility_reason
                 elif requested in self.config.exclude_models:
                     reason = "excluded"
                 elif not self._rotation_allowed(requested):
-                    reason = "filtered"
+                    reason = "excluded by rotation policy"
                 else:
                     reason = ""
                     free = [requested, *free]

@@ -166,7 +166,7 @@ The proxy:
 - honors `X-Freewhirr-Complexity` to order configured strong free models and,
   when enabled, gate paid fallback
 - ignores the client's `model` field unless you set `honor_requested_model: true`.
-  When enabled, a requested model is tried first only if it is already in the free queue or the catalogue confirms it is eligible for free rotation; other requested IDs are ignored, and they never add models to the paid list.
+  When enabled, a requested model is tried first only if it is already in the free queue or the catalogue confirms it is eligible for free rotation. Unknown, non-free, excluded, or filtered IDs are ignored; IDs in `paid_models` keep their configured paid position and can be reached after free models are exhausted under the `paid` policy.
 
 Claude Code's `ANTHROPIC_BASE_URL` is the **gateway root without `/v1`**
 (`http://127.0.0.1:8787`). OpenAI-compatible clients include `/v1`.
@@ -601,8 +601,9 @@ privacy/availability tradeoff, not a silent default.
 By default the proxy ignores `model` so existing clients cannot skip the free
 list. With `honor_requested_model: true`, a requested model is tried first only
 if it is already in the free queue or catalogue-verified as eligible for free
-rotation; unknown, paid, excluded, or filtered models are ignored. A request
-cannot add a model to the paid list.
+rotation. Unknown, non-free, excluded, or filtered IDs are ignored; IDs in
+`paid_models` keep their configured paid position and can be reached after free
+models are exhausted under the `paid` policy.
 
 **How is "money saved" computed?**
 Each success stores the actual (or estimated) cost and a baseline cost for the

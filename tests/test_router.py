@@ -101,15 +101,18 @@ def test_requested_model_requires_discovered_free_eligibility(
         ("other/free:model", False),
         (FREE_A, False),
     ]
-    for model_id in (
-        "paid/catalogue-model",
-        excluded,
-        audio,
-        router_id,
-        "missing/catalogue-model",
-    ):
+    rejected = {
+        "paid/catalogue-model": "not free",
+        excluded: "excluded",
+        audio: "output modalities are",
+        router_id: "tokenizer is Router",
+        "missing/catalogue-model": "not in catalogue",
+    }
+    for model_id, reason in rejected.items():
+        caplog.clear()
         assert client._model_queue(requested=model_id) == [(FREE_A, False)]
-    assert "paid/catalogue-model" in caplog.text
+        records = [record.message for record in caplog.records]
+        assert any(model_id in message and reason in message for message in records)
 
 
 def test_requested_model_never_adds_to_paid_queue(tmp_path: Path) -> None:
@@ -128,6 +131,54 @@ def test_requested_model_never_adds_to_paid_queue(tmp_path: Path) -> None:
         (PAID, True),
     ]
     assert client._model_queue(requested=PAID) == [(FREE_A, False), (PAID, True)]
+
+
+def test_requested_configured_paid_model_stays_in_paid_position(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        exhaustion_policy="paid",
+        paid_models=[PAID],
+        honor_requested_model=True,
+    )
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=PAID)])
+    expected = [(FREE_A, False), (PAID, True)]
+    assert client._model_queue(requested=None) == expected
+    assert client._model_queue(requested=PAID) == expected
+
+
+def test_requested_model_rejected_by_rotation_policy(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    requested = "vendor/logger:free"
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        honor_requested_model=True,
+        deny_data_collection=True,
+        log_level="INFO",
+    )
+    client.catalog.replace(
+        [
+            ModelInfo(id=FREE_A),
+            ModelInfo(
+                id=requested,
+                raw={
+                    "description": "Prompts are logged and used for training.",
+                    "architecture": {
+                        "output_modalities": ["text"],
+                        "tokenizer": "Other",
+                    },
+                },
+            ),
+        ]
+    )
+    assert client._rotation_allowed(requested) is False
+    assert client._model_queue(requested=requested) == [(FREE_A, False)]
+    assert any(
+        requested in record.message and "excluded by rotation policy" in record.message
+        for record in caplog.records
+    )
 
 
 @respx.mock
