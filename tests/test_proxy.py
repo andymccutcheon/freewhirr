@@ -348,3 +348,188 @@ async def test_proxy_responses_stream(tmp_path: Path) -> None:
     assert "response.output_text.delta" in text
     assert "tok" in text
     assert "event: response.completed" in text
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses_stream_tool_call_continuation(tmp_path: Path) -> None:
+    mock_models()
+    tool_stream = (
+        'data: {"id":"s1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1",'
+        '"type":"function","function":{"name":"lookup","arguments":"{\\"q\\":\\"x\\"}"}}]},'
+        '"index":0}]}'
+        '\n\ndata: {"id":"s1","choices":[{"delta":{},"finish_reason":"tool_calls"}]}'
+        "\n\ndata: [DONE]\n\n"
+    )
+    done_stream = (
+        'data: {"id":"s2","choices":[{"delta":{"content":"done"},"index":0}]}'
+        '\n\ndata: {"id":"s2","choices":[{"delta":{},"finish_reason":"stop"}]}'
+        "\n\ndata: [DONE]\n\n"
+    )
+    mock_completions(
+        {
+            FREE_B: [
+                httpx.Response(
+                    200, content=tool_stream.encode(), headers={"content-type": "text/event-stream"}
+                ),
+                httpx.Response(
+                    200, content=done_stream.encode(), headers={"content-type": "text/event-stream"}
+                ),
+            ]
+        }
+    )
+    app = create_app(make_client(tmp_path))
+    async with _http(app) as client:
+        async with client.stream(
+            "POST",
+            "/v1/responses",
+            json={"model": "freewhirr", "input": "lookup x", "stream": True},
+        ) as first:
+            first_text = "".join([part async for part in first.aiter_text()])
+        first_id = _completed_response(first_text)["id"]
+        async with client.stream(
+            "POST",
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "previous_response_id": first_id,
+                "input": [{"type": "function_call_output", "call_id": "call-1", "output": "found"}],
+                "stream": True,
+            },
+        ) as second:
+            second_text = "".join([part async for part in second.aiter_text()])
+    assert "event: response.completed" in second_text
+    sent = _last_completion_request().read()
+    payload = json.loads(sent)
+    assert payload["messages"][-2] == {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call-1",
+                "type": "function",
+                "function": {"name": "lookup", "arguments": '{"q":"x"}'},
+            }
+        ],
+    }
+    assert payload["messages"][-1]["role"] == "tool"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses_stream_text_continuation(tmp_path: Path) -> None:
+    mock_models()
+    first_stream = (
+        'data: {"id":"s1","choices":[{"delta":{"content":"hello"},"index":0}]}'
+        '\n\ndata: {"id":"s1","choices":[{"delta":{},"finish_reason":"stop"}]}'
+        "\n\ndata: [DONE]\n\n"
+    )
+    done_stream = (
+        'data: {"id":"s2","choices":[{"delta":{"content":"done"},"index":0}]}'
+        '\n\ndata: {"id":"s2","choices":[{"delta":{},"finish_reason":"stop"}]}'
+        "\n\ndata: [DONE]\n\n"
+    )
+    mock_completions(
+        {
+            FREE_A: [
+                httpx.Response(
+                    200,
+                    content=first_stream.encode(),
+                    headers={"content-type": "text/event-stream"},
+                ),
+                httpx.Response(
+                    200, content=done_stream.encode(), headers={"content-type": "text/event-stream"}
+                ),
+            ]
+        }
+    )
+    app = create_app(make_client(tmp_path))
+    async with _http(app) as client:
+        async with client.stream(
+            "POST", "/v1/responses", json={"model": "freewhirr", "input": "hi", "stream": True}
+        ) as first:
+            first_text = "".join([part async for part in first.aiter_text()])
+        first_id = _completed_response(first_text)["id"]
+        async with client.stream(
+            "POST",
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "previous_response_id": first_id,
+                "input": "next",
+                "stream": True,
+            },
+        ) as second:
+            second_text = "".join([part async for part in second.aiter_text()])
+    assert "event: response.completed" in second_text
+    payload = json.loads(_last_completion_request().read())
+    assert payload["messages"][-2] == {"role": "assistant", "content": "hello"}
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses_stream_ids_are_unique_and_continuable(tmp_path: Path) -> None:
+    mock_models()
+    streams = [
+        'data: {"id":"s1","choices":[{"delta":{"content":"one"},"index":0}]}\n\n'
+        'data: {"id":"s1","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        "data: [DONE]\n\n",
+        'data: {"id":"s2","choices":[{"delta":{"content":"two"},"index":0}]}\n\n'
+        'data: {"id":"s2","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        "data: [DONE]\n\n",
+        'data: {"id":"s3","choices":[{"delta":{"content":"done"},"index":0}]}\n\n'
+        'data: {"id":"s3","choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        "data: [DONE]\n\n",
+    ]
+    mock_completions(
+        {
+            FREE_A: [
+                httpx.Response(
+                    200, content=stream.encode(), headers={"content-type": "text/event-stream"}
+                )
+                for stream in streams
+            ]
+        }
+    )
+    app = create_app(make_client(tmp_path))
+    async with _http(app) as client:
+        ids = []
+        for prompt in ("first", "second"):
+            async with client.stream(
+                "POST",
+                "/v1/responses",
+                json={"model": "freewhirr", "input": prompt, "stream": True},
+            ) as response:
+                ids.append(
+                    _completed_response("".join([part async for part in response.aiter_text()]))[
+                        "id"
+                    ]
+                )
+        assert ids[0] != ids[1]
+        async with client.stream(
+            "POST",
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "previous_response_id": ids[0],
+                "input": "continue",
+                "stream": True,
+            },
+        ) as response:
+            continuation_text = "".join([part async for part in response.aiter_text()])
+    assert _completed_response(continuation_text)["previous_response_id"] == ids[0]
+    payload = json.loads(_last_completion_request().read())
+    assert payload["messages"][-2] == {"role": "assistant", "content": "one"}
+
+
+def _completed_response(sse: str) -> dict[str, object]:
+    for block in sse.split("\n\n"):
+        if block.startswith("event: response.completed\n"):
+            data = json.loads(block.split("data: ", 1)[1])
+            return data["response"]
+    raise AssertionError("response.completed event not found")
+
+
+def _last_completion_request() -> httpx.Request:
+    calls = [call for call in respx.calls if call.request.url.path.endswith("/chat/completions")]
+    return calls[-1].request
