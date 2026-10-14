@@ -98,3 +98,22 @@ def test_stealth_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.promote_stealth is True
     assert config.alert_webhook == "https://example.test/hook"
     assert config.watch_interval == 15.0
+
+
+def test_exclude_models_yaml_and_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "freewhirr.yaml"
+    path.write_text(
+        "exclude_models:\n  - nvidia/nemotron-3.5-content-safety:free\n", encoding="utf-8"
+    )
+    monkeypatch.delenv("FREEWHIRR_EXCLUDE_MODELS", raising=False)
+    config = load_config(path)
+    assert config.exclude_models == ["nvidia/nemotron-3.5-content-safety:free"]
+
+    monkeypatch.setenv("FREEWHIRR_EXCLUDE_MODELS", "one/model, two/model")
+    config = load_config()
+    assert config.exclude_models == ["one/model", "two/model"]
+
+    toml_path = tmp_path / "freewhirr.toml"
+    toml_path.write_text('exclude_models = ["one/model", "two/model"]\n', encoding="utf-8")
+    monkeypatch.delenv("FREEWHIRR_EXCLUDE_MODELS", raising=False)
+    assert load_config(toml_path).exclude_models == ["one/model", "two/model"]

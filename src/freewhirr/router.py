@@ -59,6 +59,24 @@ def estimate_prompt_tokens(messages: list[dict[str, Any]] | None, prompt: str | 
     return max(1, len(json.dumps(messages, ensure_ascii=False)) // 4)
 
 
+def _discovered_ineligibility_reason(info: ModelInfo) -> str | None:
+    """Return why a discovered free catalogue entry should not enter chat rotation."""
+    architecture = info.raw.get("architecture")
+    if not isinstance(architecture, dict):
+        return None
+    modalities = architecture.get("output_modalities")
+    if (
+        isinstance(modalities, list)
+        and modalities
+        and all(isinstance(item, str) and item for item in modalities)
+        and modalities != ["text"]
+    ):
+        return f"output modalities are {modalities!r}, not text only"
+    if architecture.get("tokenizer") == "Router":
+        return "tokenizer is Router"
+    return None
+
+
 class Completions:
     def __init__(self, router: Freewhirr) -> None:
         self._router = router
@@ -171,6 +189,7 @@ class Freewhirr:
             self.config, client=client, async_client=async_client
         )
         self.catalog = ModelCatalog(self.config.model_cache_ttl)
+        self._warned_excluded_pins: set[str] = set()
         self.budget = BudgetGate(self.config, self.store)
         self.chat = ChatNamespace(self)
         self.achat = AsyncChatNamespace(self)
@@ -850,12 +869,28 @@ class Freewhirr:
         return False
 
     def _ordered_free_ids(self) -> list[str]:
-        discovered = [info.id for info in self.catalog.all() if info.is_free]
-        user = [
-            model_id for model_id in self.config.free_models if self._rotation_allowed(model_id)
-        ]
+        discovered = []
+        for info in self.catalog.all():
+            if not info.is_free:
+                continue
+            reason = _discovered_ineligibility_reason(info)
+            if reason:
+                logger.debug("Skipping discovered free model %s: %s", info.id, reason)
+                continue
+            discovered.append(info.id)
+        user = []
+        for model_id in self.config.free_models:
+            if model_id in self.config.exclude_models:
+                if model_id not in self._warned_excluded_pins:
+                    logger.warning(
+                        "Free model %s is both pinned and excluded; exclusion wins", model_id
+                    )
+                    self._warned_excluded_pins.add(model_id)
+                continue
+            if self._rotation_allowed(model_id):
+                user.append(model_id)
         allowed_discovered = [
-            model_id for model_id in discovered if self._rotation_allowed(model_id)
+            model_id for model_id in discovered if self._discovered_rotation_allowed(model_id)
         ]
         merged = merge_model_lists(
             user,
@@ -866,6 +901,15 @@ class Freewhirr:
             return merged
         stealth = [model_id for model_id in merged if self._stealth_report(model_id).is_stealth]
         return [*stealth, *[model_id for model_id in merged if model_id not in set(stealth)]]
+
+    def _discovered_rotation_allowed(self, model_id: str) -> bool:
+        if model_id in self.config.exclude_models:
+            logger.debug("Skipping discovered free model %s: excluded by exclude_models", model_id)
+            return False
+        if not self._rotation_allowed(model_id):
+            logger.debug("Skipping discovered free model %s: excluded by rotation policy", model_id)
+            return False
+        return True
 
     def _rotation_allowed(self, model_id: str) -> bool:
         info = self.catalog.get(model_id)

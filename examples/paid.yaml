@@ -2,6 +2,7 @@
 # inside explicit dollar and share guardrails.
 exhaustion_policy: paid
 include_discovered_free: true
+exclude_models: []
 strong_free_models:
   - google/gemma-4-31b-it:free
 free_models: []

@@ -28,6 +28,12 @@ would have done.
 
 `freewhirr` flips that default.
 
+Discovery skips models whose catalogue metadata shows non-text output or an
+OpenRouter router tokenizer. Add IDs to `exclude_models` to remove other
+endpoints, such as classifiers. This relies on OpenRouter's prompt, completion,
+and request prices: a text-only model billed another way may still be included.
+For the hard guarantee, pin `free_models` and set `include_discovered_free: false`.
+
 | Policy | What happens when free models are exhausted |
 | --- | --- |
 | `stop` | Raise a clear error. **Never spend money.** |
@@ -88,6 +94,7 @@ except FreeModelsExhausted as exc:
 # examples/paid.yaml
 exhaustion_policy: paid
 include_discovered_free: true
+exclude_models: []
 strong_free_models:
   - google/gemma-4-31b-it:free
 paid_models:
@@ -523,6 +530,7 @@ Files, first match wins:
 | Policy | `FREEWHIRR_EXHAUSTION_POLICY` | `stop` |
 | Free model pin list | `FREEWHIRR_FREE_MODELS` | (discover) |
 | Strong free models | `FREEWHIRR_STRONG_FREE_MODELS` | `[]` |
+| Excluded free model IDs | `FREEWHIRR_EXCLUDE_MODELS` | `[]` |
 | Paid model list | `FREEWHIRR_PAID_MODELS` | `[]` |
 | Merge discovered free models | `FREEWHIRR_INCLUDE_DISCOVERED` | `true` |
 | Max $ / request | `FREEWHIRR_MAX_PAID_PER_REQUEST` | unset |

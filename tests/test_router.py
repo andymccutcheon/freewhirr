@@ -474,3 +474,73 @@ def test_catalog_cached(tmp_path: Path) -> None:
     client.complete(messages=[{"role": "user", "content": "b"}])
     model_calls = [call for call in respx.calls if call.request.url.path.endswith("/models")]
     assert len(model_calls) == 1
+
+
+def test_discovered_free_rotation_filters_non_chat_catalogue_entries(tmp_path: Path) -> None:
+    from freewhirr.models import parse_model
+
+    fixture = json.loads(
+        Path(__file__).with_name("fixtures").joinpath("free_model_eligibility.json").read_text()
+    )
+    client = make_client(tmp_path, free_models=[], include_discovered_free=True)
+    client.catalog.replace([parse_model(entry) for entry in fixture["data"]])
+    result = client.list_free_models()
+    assert "google/lyria-3-pro-preview" not in result
+    assert "google/lyria-3-clip-preview" not in result
+    assert "openrouter/free" not in result
+    assert "liquid/lfm-2.5-2.6b:free" in result
+    assert "nvidia/nemotron-3.5-lightning:free" in result
+    assert "nvidia/nemotron-3.5-content-safety:free" in result
+
+
+def test_exclude_models_filters_discovered_and_pinned_with_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from freewhirr.models import parse_model
+
+    fixture = json.loads(
+        Path(__file__).with_name("fixtures").joinpath("free_model_eligibility.json").read_text()
+    )
+    excluded = "nvidia/nemotron-3.5-content-safety:free"
+    client = make_client(
+        tmp_path, free_models=[excluded], exclude_models=[excluded], include_discovered_free=True
+    )
+    client.catalog.replace([parse_model(entry) for entry in fixture["data"]])
+    assert excluded not in client.list_free_models()
+    client.list_free_models()
+    warnings = [record for record in caplog.records if excluded in record.message]
+    assert len(warnings) == 1
+    assert "excluded" in warnings[0].message.lower()
+
+
+def test_pinned_non_chat_models_are_kept_but_excluded_pin_is_removed(tmp_path: Path) -> None:
+    from freewhirr.models import parse_model
+
+    fixture = json.loads(
+        Path(__file__).with_name("fixtures").joinpath("free_model_eligibility.json").read_text()
+    )
+    lyria = "google/lyria-3-pro-preview"
+    router_id = "openrouter/free"
+    client = make_client(
+        tmp_path,
+        free_models=[lyria, router_id],
+        include_discovered_free=True,
+    )
+    client.catalog.replace([parse_model(entry) for entry in fixture["data"]])
+    assert client.list_free_models()[:2] == [lyria, router_id]
+
+
+@pytest.mark.parametrize(
+    "architecture", [None, {}, {"output_modalities": []}, {"output_modalities": "bad"}]
+)
+def test_incomplete_architecture_keeps_discovered_model_eligible(
+    tmp_path: Path, architecture: object
+) -> None:
+    client = make_client(tmp_path, free_models=[], include_discovered_free=True)
+    model = {"id": "unknown/metadata:free", "pricing": {"prompt": "0", "completion": "0"}}
+    if architecture is not None:
+        model["architecture"] = architecture
+    from freewhirr.models import parse_model
+
+    client.catalog.replace([parse_model(model)])
+    assert "unknown/metadata:free" in client.list_free_models()
