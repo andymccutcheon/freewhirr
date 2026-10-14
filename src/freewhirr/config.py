@@ -36,6 +36,7 @@ class FreewhirrConfig(BaseModel):
     base_url: str = DEFAULT_BASE_URL
     exhaustion_policy: ExhaustionPolicy = ExhaustionPolicy.STOP
     free_models: list[str] = Field(default_factory=list)
+    strong_free_models: list[str] = Field(default_factory=list)
     paid_models: list[str] = Field(default_factory=list)
     include_discovered_free: bool = True
     max_paid_per_request: float | None = None
@@ -73,7 +74,7 @@ class FreewhirrConfig(BaseModel):
             return value.lower()
         return value
 
-    @field_validator("free_models", "paid_models", mode="before")
+    @field_validator("free_models", "strong_free_models", "paid_models", mode="before")
     @classmethod
     def _split_models(cls, value: Any) -> Any:
         if value is None:
@@ -182,6 +183,8 @@ def env_overrides() -> dict[str, Any]:
         mapping["exhaustion_policy"] = policy
     if os.environ.get("FREEWHIRR_FREE_MODELS"):
         mapping["free_models"] = os.environ["FREEWHIRR_FREE_MODELS"]
+    if os.environ.get("FREEWHIRR_STRONG_FREE_MODELS"):
+        mapping["strong_free_models"] = os.environ["FREEWHIRR_STRONG_FREE_MODELS"]
     if os.environ.get("FREEWHIRR_PAID_MODELS"):
         mapping["paid_models"] = os.environ["FREEWHIRR_PAID_MODELS"]
     if os.environ.get("FREEWHIRR_INCLUDE_DISCOVERED"):

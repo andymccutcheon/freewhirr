@@ -125,6 +125,27 @@ async def test_proxy_complexity_header(tmp_path: Path) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_proxy_complexity_header_orders_strong_free_model_first(tmp_path: Path) -> None:
+    mock_models()
+    mock_completions(
+        {
+            FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "regular")),
+            FREE_B: httpx.Response(200, json=completion_payload(FREE_B, "strong")),
+        }
+    )
+    app = create_app(make_client(tmp_path, strong_free_models=[FREE_B]))
+    async with _http(app) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "hard"}]},
+            headers={"X-Freewhirr-Complexity": "high"},
+        )
+    assert response.status_code == 200
+    assert response.json()["model"] == FREE_B
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_proxy_anthropic_messages(tmp_path: Path) -> None:
     mock_models()
     mock_completions({FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "bonjour"))})

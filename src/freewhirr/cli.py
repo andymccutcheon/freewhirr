@@ -45,7 +45,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--complexity",
         choices=["low", "normal", "high"],
         default=None,
-        help="Tag used by paid_only_high_complexity.",
+        help="Order configured strong free models; high also permits paid fallback when enabled.",
     )
     chat.add_argument("--json", action="store_true", dest="as_json", help="Print the raw response.")
 

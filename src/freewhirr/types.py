@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+logger = logging.getLogger("freewhirr")
 
 
 class ExhaustionPolicy(str, Enum):
@@ -15,11 +18,26 @@ class ExhaustionPolicy(str, Enum):
 
 
 class Complexity(str, Enum):
-    """Optional per-request tag used by the paid-escalation gate."""
+    """Optional per-request tag for free-model ordering and paid escalation."""
 
     LOW = "low"
     NORMAL = "normal"
     HIGH = "high"
+
+
+def normalize_complexity(value: Complexity | str | None) -> Complexity | None:
+    """Normalize a request complexity tag; unknown values are logged and treated as untagged."""
+    if value is None:
+        return None
+    if isinstance(value, Complexity):
+        return value
+    normalized = str(value).strip().lower()
+    try:
+        return Complexity(normalized)
+    except ValueError:
+        accepted = ", ".join(item.value for item in Complexity)
+        logger.warning("Unrecognized complexity value %r; accepted values are: %s", value, accepted)
+        return None
 
 
 class Outcome(str, Enum):
