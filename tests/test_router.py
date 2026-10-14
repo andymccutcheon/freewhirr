@@ -72,29 +72,29 @@ def test_model_queue_honors_requested_model_first(tmp_path: Path) -> None:
 def test_requested_model_requires_discovered_free_eligibility(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
+    from freewhirr.models import parse_model
+
     caplog.set_level("INFO", logger="freewhirr")
+    fixture = json.loads(
+        Path(__file__).with_name("fixtures").joinpath("free_model_eligibility.json").read_text()
+    )
+    excluded = "nvidia/nemotron-3.5-content-safety:free"
+    audio = "google/lyria-3-pro-preview"
+    router_id = "openrouter/free"
     client = make_client(
         tmp_path,
         free_models=[FREE_A],
         include_discovered_free=False,
         honor_requested_model=True,
-        exclude_models=["excluded/free:model"],
+        exclude_models=[excluded],
         log_level="INFO",
     )
     client.catalog.replace(
         [
             ModelInfo(id=FREE_A),
             ModelInfo(id="other/free:model"),
-            ModelInfo(id="excluded/free:model"),
             ModelInfo(id="paid/catalogue-model", pricing=ModelPricing(prompt=0.1)),
-            ModelInfo(
-                id="audio/free:model",
-                raw={"architecture": {"output_modalities": ["text", "audio"]}},
-            ),
-            ModelInfo(
-                id="router/free:model",
-                raw={"architecture": {"tokenizer": "Router"}},
-            ),
+            *[parse_model(entry) for entry in fixture["data"]],
         ]
     )
     assert client._model_queue(requested="other/free:model") == [
@@ -103,9 +103,9 @@ def test_requested_model_requires_discovered_free_eligibility(
     ]
     for model_id in (
         "paid/catalogue-model",
-        "excluded/free:model",
-        "audio/free:model",
-        "router/free:model",
+        excluded,
+        audio,
+        router_id,
         "missing/catalogue-model",
     ):
         assert client._model_queue(requested=model_id) == [(FREE_A, False)]
