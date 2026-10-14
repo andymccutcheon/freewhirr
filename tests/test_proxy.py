@@ -46,6 +46,37 @@ async def test_proxy_chat_and_health(tmp_path: Path) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_proxy_requested_paid_catalogue_model_uses_free_queue(tmp_path: Path) -> None:
+    mock_models()
+    mock_completions(
+        {
+            FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "free via proxy")),
+            "openai/gpt-4o-mini": httpx.Response(
+                200, json=completion_payload("openai/gpt-4o-mini", "paid", cost=0.01)
+            ),
+        }
+    )
+    app = create_app(make_client(tmp_path, honor_requested_model=True))
+    async with _http(app) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "openai/gpt-4o-mini",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["model"] == FREE_A
+    upstream_models = [
+        json.loads(call.request.content)["model"]
+        for call in respx.calls
+        if call.request.url.path.endswith("/chat/completions")
+    ]
+    assert upstream_models == [FREE_A]
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_proxy_lists_models(tmp_path: Path) -> None:
     mock_models()
     app = create_app(

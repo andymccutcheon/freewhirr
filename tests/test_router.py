@@ -9,7 +9,7 @@ import respx
 
 from freewhirr.errors import BudgetExceeded, FreeModelsExhausted, PaidFallbackExhausted
 from freewhirr.quality import MinLengthCheck
-from freewhirr.types import ExhaustionPolicy, ModelInfo
+from freewhirr.types import ExhaustionPolicy, ModelInfo, ModelPricing
 
 from .conftest import (
     FREE_A,
@@ -67,6 +67,91 @@ def test_model_queue_honors_requested_model_first(tmp_path: Path) -> None:
     client = make_client(tmp_path, free_models=[FREE_A, FREE_B], honor_requested_model=True)
     client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
     assert client._model_queue(requested=FREE_B) == [(FREE_B, False), (FREE_A, False)]
+
+
+def test_requested_model_requires_discovered_free_eligibility(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("INFO", logger="freewhirr")
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        include_discovered_free=False,
+        honor_requested_model=True,
+        exclude_models=["excluded/free:model"],
+        log_level="INFO",
+    )
+    client.catalog.replace(
+        [
+            ModelInfo(id=FREE_A),
+            ModelInfo(id="other/free:model"),
+            ModelInfo(id="excluded/free:model"),
+            ModelInfo(id="paid/catalogue-model", pricing=ModelPricing(prompt=0.1)),
+            ModelInfo(
+                id="audio/free:model",
+                raw={"architecture": {"output_modalities": ["text", "audio"]}},
+            ),
+            ModelInfo(
+                id="router/free:model",
+                raw={"architecture": {"tokenizer": "Router"}},
+            ),
+        ]
+    )
+    assert client._model_queue(requested="other/free:model") == [
+        ("other/free:model", False),
+        (FREE_A, False),
+    ]
+    for model_id in (
+        "paid/catalogue-model",
+        "excluded/free:model",
+        "audio/free:model",
+        "router/free:model",
+        "missing/catalogue-model",
+    ):
+        assert client._model_queue(requested=model_id) == [(FREE_A, False)]
+    assert "paid/catalogue-model" in caplog.text
+
+
+def test_requested_model_never_adds_to_paid_queue(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        exhaustion_policy="paid",
+        paid_models=[PAID],
+        honor_requested_model=True,
+    )
+    client.catalog.replace(
+        [ModelInfo(id=FREE_A), ModelInfo(id=PAID, pricing=ModelPricing(prompt=0.1))]
+    )
+    assert client._model_queue(requested="unlisted/model") == [
+        (FREE_A, False),
+        (PAID, True),
+    ]
+    assert client._model_queue(requested=PAID) == [(FREE_A, False), (PAID, True)]
+
+
+@respx.mock
+def test_requested_catalogue_paid_model_is_never_called_under_stop(tmp_path: Path) -> None:
+    mock_models()
+    mock_completions(
+        {
+            FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "free")),
+            FREE_B: httpx.Response(500, json={"error": {"message": "down"}}),
+            PAID: httpx.Response(200, json=completion_payload(PAID, "paid", cost=0.01)),
+        }
+    )
+    client = make_client(tmp_path, honor_requested_model=True)
+    result = client.complete(messages=[{"role": "user", "content": "hi"}], model=PAID)
+    called = [
+        json.loads(call.request.content)["model"]
+        for call in respx.calls
+        if call.request.url.path.endswith("/chat/completions")
+    ]
+    assert called == [FREE_A]
+    assert result.model == FREE_A and result.paid is False
+    assert all(
+        event["winning_model"] != PAID and event["cost_usd"] == 0 for event in client.store.events()
+    )
 
 
 @pytest.mark.parametrize("complexity", ["low", "normal", "high", None])

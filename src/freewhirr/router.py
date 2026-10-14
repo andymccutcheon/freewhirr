@@ -787,9 +787,24 @@ class Freewhirr:
             if requested in free:
                 free = [requested, *[item for item in free if item != requested]]
                 requested_first = requested
-            elif requested not in self.config.paid_models:
-                free = [requested, *free]
-                requested_first = requested
+            else:
+                info = self.catalog.get(requested)
+                if info is None:
+                    reason = "not in catalogue"
+                elif not info.is_free:
+                    reason = "not free"
+                elif _discovered_ineligibility_reason(info):
+                    reason = "filtered"
+                elif requested in self.config.exclude_models:
+                    reason = "excluded"
+                elif not self._rotation_allowed(requested):
+                    reason = "filtered"
+                else:
+                    reason = ""
+                    free = [requested, *free]
+                    requested_first = requested
+                if reason:
+                    logger.info("Ignoring requested model %s: %s", requested, reason)
 
         tag = normalize_complexity(complexity)
         strong = self.config.strong_free_models
@@ -826,14 +841,6 @@ class Freewhirr:
         queue: list[tuple[str, bool]] = [(model_id, False) for model_id in free]
         if self.config.exhaustion_policy is ExhaustionPolicy.PAID:
             paid = list(self.config.paid_models)
-            if (
-                self.config.honor_requested_model
-                and requested
-                and requested not in ROUTER_ALIASES
-                and requested not in free
-                and requested not in paid
-            ):
-                paid = [requested, *paid]
             queue.extend((model_id, True) for model_id in paid)
         if not queue:
             raise FreeModelsExhausted(
