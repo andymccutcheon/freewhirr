@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -324,9 +325,8 @@ async def _responses_stream(
     extra_body: dict[str, Any],
     previous_response_id: str | None,
 ) -> AsyncIterator[str]:
-    del previous_response_id
     requested = str(model or "freewhirr")
-    response_id = f"resp_{requested.replace('/', '_')[:24]}"
+    response_id = f"resp_{uuid.uuid4().hex}"
     try:
         async for event in aopenai_chunks_to_responses_sse(
             router.astream(
@@ -337,9 +337,10 @@ async def _responses_stream(
             ),
             model=requested,
             response_id=response_id,
+            previous_response_id=previous_response_id,
+            on_complete=lambda assistant: memory.remember(response_id, [*messages, assistant]),
         ):
             yield event
-        memory.remember(response_id, messages)
     except FreewhirrError as exc:
         yield responses_sse_event(
             "response.failed",

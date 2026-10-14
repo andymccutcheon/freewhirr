@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Preserve streamed Responses API assistant turns and unique response IDs for continuations.
+
 ## 0.1.0
 
 - First public release of **freewhirr** (`pip install freewhirr`).

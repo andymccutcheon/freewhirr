@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
 
 from freewhirr.types import extract_message_content
@@ -115,14 +115,21 @@ async def aopenai_chunks_to_responses_sse(
     *,
     model: str,
     response_id: str = "resp_stream",
+    previous_response_id: str | None = None,
+    on_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> AsyncIterator[str]:
-    assembler = _ResponsesStream(model=model, response_id=response_id)
+    assembler = _ResponsesStream(
+        model=model, response_id=response_id, previous_response_id=previous_response_id
+    )
     for event in assembler.start():
         yield event
     async for chunk in chunks:
         for event in assembler.ingest(chunk):
             yield event
-    for event in assembler.finish():
+    finish_events = assembler.finish()
+    if on_complete is not None:
+        on_complete(assembler.openai_message())
+    for event in finish_events:
         yield event
 
 
@@ -363,9 +370,12 @@ def _as_message_id(value: Any) -> str:
 
 
 class _ResponsesStream:
-    def __init__(self, *, model: str, response_id: str) -> None:
+    def __init__(
+        self, *, model: str, response_id: str, previous_response_id: str | None = None
+    ) -> None:
         self.model = model
         self.response_id = response_id
+        self.previous_response_id = previous_response_id
         self.sequence = 0
         self.text: list[str] = []
         self.message_id = (
@@ -592,6 +602,26 @@ class _ResponsesStream:
             items.append(_message_item("", self.message_id))
         return items
 
+    def openai_message(self) -> dict[str, Any]:
+        text = "".join(self.text)
+        message: dict[str, Any] = {
+            "role": "assistant",
+            "content": text if text else (None if self.tool_indexes else ""),
+        }
+        if self.tool_indexes:
+            message["tool_calls"] = [
+                {
+                    "id": meta["id"],
+                    "type": "function",
+                    "function": {
+                        "name": meta["item"]["name"],
+                        "arguments": meta["arguments"] or "{}",
+                    },
+                }
+                for meta in self.tool_indexes.values()
+            ]
+        return message
+
     def _skeleton(self, status: str) -> dict[str, Any]:
         return {
             "id": self.response_id,
@@ -604,7 +634,7 @@ class _ResponsesStream:
             "model": self.model,
             "output": [],
             "parallel_tool_calls": True,
-            "previous_response_id": None,
+            "previous_response_id": self.previous_response_id,
             "store": False,
             "usage": None,
         }
