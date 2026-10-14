@@ -20,6 +20,8 @@ paid_models:
 max_paid_per_day: 1.5
 deny_data_collection: true
 api_key: from-file
+strong_free_models:
+  - strong/one:free
 """,
         encoding="utf-8",
     )
@@ -31,6 +33,7 @@ api_key: from-file
     assert config.paid_models == ["openai/gpt-4o-mini"]
     assert config.max_paid_per_day == 1.5
     assert config.deny_data_collection is True
+    assert config.strong_free_models == ["strong/one:free"]
 
 
 def test_toml_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -39,12 +42,14 @@ def test_toml_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """
 exhaustion_policy = "stop"
 free_models = ["a/free", "b/free"]
+strong_free_models = ["b/free"]
 """,
         encoding="utf-8",
     )
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     config = load_config(path)
     assert config.free_models == ["a/free", "b/free"]
+    assert config.strong_free_models == ["b/free"]
     assert config.exhaustion_policy is ExhaustionPolicy.STOP
 
 
@@ -59,9 +64,11 @@ def test_discover_cwd_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 def test_comma_separated_env_models(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FREEWHIRR_FREE_MODELS", "one, two ,three")
     monkeypatch.setenv("FREEWHIRR_PAID_MODELS", "paid/one")
+    monkeypatch.setenv("FREEWHIRR_STRONG_FREE_MODELS", "strong/one, strong/two")
     config = load_config()
     assert config.free_models == ["one", "two", "three"]
     assert config.paid_models == ["paid/one"]
+    assert config.strong_free_models == ["strong/one", "strong/two"]
 
 
 def test_paid_policy_requires_models() -> None:

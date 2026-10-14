@@ -86,6 +86,121 @@ def test_complexity_does_not_change_baseline_model_order(
     assert result.models_tried == [FREE_A, FREE_B]
 
 
+@pytest.mark.parametrize(
+    ("complexity", "expected"),
+    [
+        ("high", [(FREE_B, False), (FREE_A, False)]),
+        ("low", [(FREE_A, False), (FREE_B, False)]),
+        ("normal", [(FREE_A, False), (FREE_B, False)]),
+        (None, [(FREE_A, False), (FREE_B, False)]),
+    ],
+)
+def test_complexity_reorders_only_configured_strong_free_models(
+    tmp_path: Path, complexity: str | None, expected: list[tuple[str, bool]]
+) -> None:
+    client = make_client(tmp_path, free_models=[FREE_A, FREE_B], strong_free_models=[FREE_B])
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    queue = client._model_queue(requested=None, complexity=complexity)
+    assert queue == expected
+    baseline = client._model_queue(requested=None)
+    assert len(queue) == len(baseline)
+    assert set(queue) == set(baseline)
+
+
+def test_complexity_reorder_ignores_strong_models_absent_from_free_queue(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A, FREE_B],
+        strong_free_models=["missing/model:free", FREE_B],
+    )
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    assert client._model_queue(requested=None, complexity="high") == [
+        (FREE_B, False),
+        (FREE_A, False),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("complexity", "expected"),
+    [
+        ("high", [(FREE_B, False), (FREE_A, False), ("discovered/third:free", False)]),
+        ("low", [("discovered/third:free", False), (FREE_B, False), (FREE_A, False)]),
+    ],
+)
+def test_strong_models_keep_configured_order(
+    tmp_path: Path, complexity: str, expected: list[tuple[str, bool]]
+) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A, FREE_B],
+        include_discovered_free=True,
+        strong_free_models=[FREE_B, FREE_A],
+    )
+    client.catalog.replace(
+        [ModelInfo(id=FREE_A), ModelInfo(id=FREE_B), ModelInfo(id="discovered/third:free")]
+    )
+    assert client._model_queue(requested=None, complexity=complexity) == expected
+
+
+def test_requested_model_stays_first_with_complexity_ordering(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A, FREE_B],
+        strong_free_models=[FREE_B],
+        honor_requested_model=True,
+    )
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    assert client._model_queue(requested=FREE_A, complexity="high") == [
+        (FREE_A, False),
+        (FREE_B, False),
+    ]
+
+
+def test_high_complexity_precedes_stealth_but_low_keeps_stealth_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A, FREE_B],
+        strong_free_models=[FREE_A],
+        promote_stealth=True,
+    )
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    monkeypatch.setattr(
+        client,
+        "_stealth_report",
+        lambda model: type("Report", (), {"is_stealth": model == FREE_B})(),
+    )
+    assert client._model_queue(requested=None, complexity="high") == [
+        (FREE_A, False),
+        (FREE_B, False),
+    ]
+    assert client._model_queue(requested=None, complexity="low") == [
+        (FREE_B, False),
+        (FREE_A, False),
+    ]
+
+
+def test_unknown_complexity_warns_and_is_untagged_for_ordering(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A, FREE_B],
+        strong_free_models=[FREE_B],
+        paid_only_high_complexity=True,
+    )
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
+    assert client._model_queue(requested=None, complexity=" hgih ") == [
+        (FREE_A, False),
+        (FREE_B, False),
+    ]
+    assert "hgih" in caplog.text
+    assert "low" in caplog.text and "normal" in caplog.text and "high" in caplog.text
+    assert not client.budget.decide(complexity=" hgih ", estimated_cost=0).allowed
+    assert client.budget.decide(complexity=" HIGH ", estimated_cost=0).allowed
+
+
 @respx.mock
 def test_failsover_on_429(tmp_path: Path) -> None:
     mock_models()

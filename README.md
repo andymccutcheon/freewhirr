@@ -88,6 +88,8 @@ except FreeModelsExhausted as exc:
 # examples/paid.yaml
 exhaustion_policy: paid
 include_discovered_free: true
+strong_free_models:
+  - meta-llama/llama-3.2-3b-instruct:free
 paid_models:
   - openai/gpt-4o-mini
 max_paid_per_request: 0.05
@@ -104,6 +106,12 @@ are true:
 - the model's estimated worst-case cost exceeds `max_paid_per_request`
 - another paid success would push the paid share above `max_paid_share`
 - `paid_only_high_complexity` is on and the request was not tagged `high`
+
+Set `strong_free_models` to the free model IDs you trust for harder requests.
+A `high` tag tries those models first; `low` saves their rate limits by trying
+them last. The tag only reorders models already in the free queue. `normal` or
+an omitted tag keeps the usual order. The same tag can also open paid fallback
+when `paid_only_high_complexity` is enabled.
 
 ```python
 result = client.complete(
@@ -148,7 +156,8 @@ The proxy:
 - estimates `POST /v1/messages/count_tokens` from the prompt (heuristic, not
   a billed tokenizer)
 - lists the current free catalog at `GET /v1/models`
-- honors `X-Freewhirr-Complexity: high` for the paid-complexity gate
+- honors `X-Freewhirr-Complexity` to order configured strong free models and,
+  when enabled, gate paid fallback
 - ignores the client's `model` field unless you set `honor_requested_model: true`
   (so a hardcoded `gpt-4o-mini` in an app cannot accidentally skip the free list)
 
@@ -513,13 +522,14 @@ Files, first match wins:
 | Base URL | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` |
 | Policy | `FREEWHIRR_EXHAUSTION_POLICY` | `stop` |
 | Free model pin list | `FREEWHIRR_FREE_MODELS` | (discover) |
+| Strong free models | `FREEWHIRR_STRONG_FREE_MODELS` | `[]` |
 | Paid model list | `FREEWHIRR_PAID_MODELS` | `[]` |
 | Merge discovered free models | `FREEWHIRR_INCLUDE_DISCOVERED` | `true` |
 | Max $ / request | `FREEWHIRR_MAX_PAID_PER_REQUEST` | unset |
 | Max $ / day | `FREEWHIRR_MAX_PAID_PER_DAY` | unset |
 | Max $ / month | `FREEWHIRR_MAX_PAID_PER_MONTH` | unset |
 | Max paid share (0–1) | `FREEWHIRR_MAX_PAID_SHARE` | unset |
-| Paid only if `complexity=high` | `FREEWHIRR_PAID_ONLY_HIGH_COMPLEXITY` | `false` |
+| Gate paid fallback on `complexity=high` | `FREEWHIRR_PAID_ONLY_HIGH_COMPLEXITY` | `false` |
 | `data_collection: deny` | `FREEWHIRR_DENY_DATA_COLLECTION` | `false` |
 | Catalog TTL seconds | `FREEWHIRR_MODEL_CACHE_TTL` | `3600` |
 | HTTP timeout | `FREEWHIRR_TIMEOUT` | `60` |

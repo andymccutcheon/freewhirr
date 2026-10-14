@@ -43,6 +43,7 @@ from freewhirr.types import (
     Outcome,
     Usage,
     extract_message_content,
+    normalize_complexity,
 )
 
 logger = logging.getLogger("freewhirr")
@@ -242,7 +243,7 @@ class Freewhirr:
         attempts: list[Attempt] = []
         last_error: Exception | None = None
 
-        for model_id, paid in self._model_queue(requested=model):
+        for model_id, paid in self._model_queue(requested=model, complexity=complexity):
             if not self._allow_tools(
                 model_id, params=params, extra_body=extra_body, attempts=attempts
             ):
@@ -315,7 +316,7 @@ class Freewhirr:
         attempts: list[Attempt] = []
         last_error: Exception | None = None
 
-        for model_id, paid in self._model_queue(requested=model):
+        for model_id, paid in self._model_queue(requested=model, complexity=complexity):
             if not self._allow_tools(
                 model_id, params=params, extra_body=extra_body, attempts=attempts
             ):
@@ -386,7 +387,7 @@ class Freewhirr:
         attempts: list[Attempt] = []
         last_error: Exception | None = None
 
-        for model_id, paid in self._model_queue(requested=model):
+        for model_id, paid in self._model_queue(requested=model, complexity=complexity):
             if not self._allow_tools(
                 model_id, params=params, extra_body=extra_body, attempts=attempts
             ):
@@ -454,7 +455,7 @@ class Freewhirr:
         attempts: list[Attempt] = []
         last_error: Exception | None = None
 
-        for model_id, paid in self._model_queue(requested=model):
+        for model_id, paid in self._model_queue(requested=model, complexity=complexity):
             if not self._allow_tools(
                 model_id, params=params, extra_body=extra_body, attempts=attempts
             ):
@@ -755,13 +756,53 @@ class Freewhirr:
             payload.setdefault("stream_options", {"include_usage": True})
         return payload
 
-    def _model_queue(self, *, requested: str | None) -> list[tuple[str, bool]]:
+    def _model_queue(
+        self,
+        *,
+        requested: str | None,
+        complexity: Complexity | str | None = None,
+    ) -> list[tuple[str, bool]]:
         free = self._ordered_free_ids()
+        requested_first: str | None = None
         if self.config.honor_requested_model and requested and requested not in ROUTER_ALIASES:
             if requested in free:
                 free = [requested, *[item for item in free if item != requested]]
+                requested_first = requested
             elif requested not in self.config.paid_models:
                 free = [requested, *free]
+                requested_first = requested
+
+        tag = normalize_complexity(complexity)
+        strong = self.config.strong_free_models
+        if strong and tag in {Complexity.HIGH, Complexity.LOW}:
+            if requested_first is not None:
+                free = [model_id for model_id in free if model_id != requested_first]
+            strong_ids = [
+                model_id
+                for model_id in dict.fromkeys(strong)
+                if model_id in free and model_id != requested_first
+            ]
+            strong_set = set(strong_ids)
+            if tag is Complexity.HIGH:
+                free = [*strong_ids, *[model_id for model_id in free if model_id not in strong_set]]
+            else:
+                stealth_ids = [
+                    model_id
+                    for model_id in free
+                    if self.config.promote_stealth and self._stealth_report(model_id).is_stealth
+                ]
+                stealth_set = set(stealth_ids)
+                free = [
+                    *stealth_ids,
+                    *[
+                        model_id
+                        for model_id in free
+                        if model_id not in strong_set and model_id not in stealth_set
+                    ],
+                    *[model_id for model_id in strong_ids if model_id not in stealth_set],
+                ]
+            if requested_first is not None:
+                free = [requested_first, *free]
 
         queue: list[tuple[str, bool]] = [(model_id, False) for model_id in free]
         if self.config.exhaustion_policy is ExhaustionPolicy.PAID:

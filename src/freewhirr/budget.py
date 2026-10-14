@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from freewhirr.config import FreewhirrConfig
 from freewhirr.store import StateStore
-from freewhirr.types import Complexity
+from freewhirr.types import Complexity, normalize_complexity
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,4 @@ class BudgetGate:
 
 
 def _is_high(complexity: Complexity | str | None) -> bool:
-    if complexity is None:
-        return False
-    value = complexity.value if isinstance(complexity, Complexity) else str(complexity)
-    return value.lower() == Complexity.HIGH.value
+    return normalize_complexity(complexity) is Complexity.HIGH
