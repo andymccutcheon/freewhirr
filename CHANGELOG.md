@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Filter discovered free models with non-text outputs or router tokenizers, and add `exclude_models`.
 - Add opt-in `strong_free_models` ordering for per-request low/high complexity tags.
 - Normalize complexity tags consistently for free-model ordering and paid fallback.
 - Preserve streamed Responses API assistant turns and unique response IDs for continuations.
