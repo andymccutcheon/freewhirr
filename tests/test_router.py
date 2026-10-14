@@ -9,7 +9,7 @@ import respx
 
 from freewhirr.errors import BudgetExceeded, FreeModelsExhausted, PaidFallbackExhausted
 from freewhirr.quality import MinLengthCheck
-from freewhirr.types import ExhaustionPolicy, ModelInfo
+from freewhirr.types import ExhaustionPolicy, ModelInfo, ModelPricing
 
 from .conftest import (
     FREE_A,
@@ -67,6 +67,142 @@ def test_model_queue_honors_requested_model_first(tmp_path: Path) -> None:
     client = make_client(tmp_path, free_models=[FREE_A, FREE_B], honor_requested_model=True)
     client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=FREE_B)])
     assert client._model_queue(requested=FREE_B) == [(FREE_B, False), (FREE_A, False)]
+
+
+def test_requested_model_requires_discovered_free_eligibility(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from freewhirr.models import parse_model
+
+    caplog.set_level("INFO", logger="freewhirr")
+    fixture = json.loads(
+        Path(__file__).with_name("fixtures").joinpath("free_model_eligibility.json").read_text()
+    )
+    excluded = "nvidia/nemotron-3.5-content-safety:free"
+    audio = "google/lyria-3-pro-preview"
+    router_id = "openrouter/free"
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        include_discovered_free=False,
+        honor_requested_model=True,
+        exclude_models=[excluded],
+        log_level="INFO",
+    )
+    client.catalog.replace(
+        [
+            ModelInfo(id=FREE_A),
+            ModelInfo(id="other/free:model"),
+            ModelInfo(id="paid/catalogue-model", pricing=ModelPricing(prompt=0.1)),
+            *[parse_model(entry) for entry in fixture["data"]],
+        ]
+    )
+    assert client._model_queue(requested="other/free:model") == [
+        ("other/free:model", False),
+        (FREE_A, False),
+    ]
+    rejected = {
+        "paid/catalogue-model": "not free",
+        excluded: "excluded",
+        audio: "output modalities are",
+        router_id: "tokenizer is Router",
+        "missing/catalogue-model": "not in catalogue",
+    }
+    for model_id, reason in rejected.items():
+        caplog.clear()
+        assert client._model_queue(requested=model_id) == [(FREE_A, False)]
+        records = [record.message for record in caplog.records]
+        assert any(model_id in message and reason in message for message in records)
+
+
+def test_requested_model_never_adds_to_paid_queue(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        exhaustion_policy="paid",
+        paid_models=[PAID],
+        honor_requested_model=True,
+    )
+    client.catalog.replace(
+        [ModelInfo(id=FREE_A), ModelInfo(id=PAID, pricing=ModelPricing(prompt=0.1))]
+    )
+    assert client._model_queue(requested="unlisted/model") == [
+        (FREE_A, False),
+        (PAID, True),
+    ]
+    assert client._model_queue(requested=PAID) == [(FREE_A, False), (PAID, True)]
+
+
+def test_requested_configured_paid_model_stays_in_paid_position(tmp_path: Path) -> None:
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        exhaustion_policy="paid",
+        paid_models=[PAID],
+        honor_requested_model=True,
+    )
+    client.catalog.replace([ModelInfo(id=FREE_A), ModelInfo(id=PAID)])
+    expected = [(FREE_A, False), (PAID, True)]
+    assert client._model_queue(requested=None) == expected
+    assert client._model_queue(requested=PAID) == expected
+
+
+def test_requested_model_rejected_by_rotation_policy(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    requested = "vendor/logger:free"
+    client = make_client(
+        tmp_path,
+        free_models=[FREE_A],
+        honor_requested_model=True,
+        deny_data_collection=True,
+        log_level="INFO",
+    )
+    client.catalog.replace(
+        [
+            ModelInfo(id=FREE_A),
+            ModelInfo(
+                id=requested,
+                raw={
+                    "description": "Prompts are logged and used for training.",
+                    "architecture": {
+                        "output_modalities": ["text"],
+                        "tokenizer": "Other",
+                    },
+                },
+            ),
+        ]
+    )
+    assert client._rotation_allowed(requested) is False
+    assert client._model_queue(requested=requested) == [(FREE_A, False)]
+    assert any(
+        requested in record.message and "excluded by rotation policy" in record.message
+        for record in caplog.records
+    )
+
+
+@respx.mock
+def test_requested_catalogue_paid_model_is_never_called_under_stop(tmp_path: Path) -> None:
+    mock_models()
+    mock_completions(
+        {
+            FREE_A: httpx.Response(200, json=completion_payload(FREE_A, "free")),
+            FREE_B: httpx.Response(500, json={"error": {"message": "down"}}),
+            PAID: httpx.Response(200, json=completion_payload(PAID, "paid", cost=0.01)),
+        }
+    )
+    client = make_client(tmp_path, honor_requested_model=True)
+    result = client.complete(messages=[{"role": "user", "content": "hi"}], model=PAID)
+    called = [
+        json.loads(call.request.content)["model"]
+        for call in respx.calls
+        if call.request.url.path.endswith("/chat/completions")
+    ]
+    assert called == [FREE_A]
+    assert result.model == FREE_A and result.paid is False
+    assert all(
+        event["winning_model"] != PAID and event["cost_usd"] == 0 for event in client.store.events()
+    )
 
 
 @pytest.mark.parametrize("complexity", ["low", "normal", "high", None])

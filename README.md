@@ -32,7 +32,7 @@ Discovery skips models whose catalogue metadata shows non-text output or an
 OpenRouter router tokenizer. Add IDs to `exclude_models` to remove other
 endpoints, such as classifiers. This relies on OpenRouter's prompt, completion,
 and request prices: a text-only model billed another way may still be included.
-For the hard guarantee, pin `free_models` and set `include_discovered_free: false`.
+For the hard guarantee, pin `free_models`, set `include_discovered_free: false`, and leave `honor_requested_model` off.
 
 | Policy | What happens when free models are exhausted |
 | --- | --- |
@@ -165,8 +165,8 @@ The proxy:
 - lists the current free catalog at `GET /v1/models`
 - honors `X-Freewhirr-Complexity` to order configured strong free models and,
   when enabled, gate paid fallback
-- ignores the client's `model` field unless you set `honor_requested_model: true`
-  (so a hardcoded `gpt-4o-mini` in an app cannot accidentally skip the free list)
+- ignores the client's `model` field unless you set `honor_requested_model: true`.
+  When enabled, a requested model is tried first only if it is already in the free queue or the catalogue confirms it is eligible for free rotation. Unknown, non-free, excluded, or filtered IDs are ignored; IDs in `paid_models` keep their configured paid position and can be reached after free models are exhausted under the `paid` policy.
 
 Claude Code's `ANTHROPIC_BASE_URL` is the **gateway root without `/v1`**
 (`http://127.0.0.1:8787`). OpenAI-compatible clients include `/v1`.
@@ -599,8 +599,11 @@ privacy/availability tradeoff, not a silent default.
 
 **Can I pin a model from the OpenAI SDK?**
 By default the proxy ignores `model` so existing clients cannot skip the free
-list. Set `honor_requested_model: true` if you want a requested free model
-tried first.
+list. With `honor_requested_model: true`, a requested model is tried first only
+if it is already in the free queue or catalogue-verified as eligible for free
+rotation. Unknown, non-free, excluded, or filtered IDs are ignored; IDs in
+`paid_models` keep their configured paid position and can be reached after free
+models are exhausted under the `paid` policy.
 
 **How is "money saved" computed?**
 Each success stores the actual (or estimated) cost and a baseline cost for the
