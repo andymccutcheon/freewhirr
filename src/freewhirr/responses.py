@@ -126,10 +126,11 @@ async def aopenai_chunks_to_responses_sse(
     async for chunk in chunks:
         for event in assembler.ingest(chunk):
             yield event
-    for event in assembler.finish():
-        yield event
+    finish_events = assembler.finish()
     if on_complete is not None:
         on_complete(assembler.openai_message())
+    for event in finish_events:
+        yield event
 
 
 class ResponseMemory:
@@ -602,7 +603,11 @@ class _ResponsesStream:
         return items
 
     def openai_message(self) -> dict[str, Any]:
-        message: dict[str, Any] = {"role": "assistant", "content": "".join(self.text) or None}
+        text = "".join(self.text)
+        message: dict[str, Any] = {
+            "role": "assistant",
+            "content": text if text else (None if self.tool_indexes else ""),
+        }
         if self.tool_indexes:
             message["tool_calls"] = [
                 {
@@ -610,7 +615,7 @@ class _ResponsesStream:
                     "type": "function",
                     "function": {
                         "name": meta["item"]["name"],
-                        "arguments": meta["arguments"],
+                        "arguments": meta["arguments"] or "{}",
                     },
                 }
                 for meta in self.tool_indexes.values()

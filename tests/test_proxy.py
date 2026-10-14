@@ -8,6 +8,7 @@ import pytest
 import respx
 
 from freewhirr.proxy import create_app
+from freewhirr.responses import aopenai_chunks_to_responses_sse
 from freewhirr.types import ExhaustionPolicy
 
 from .conftest import (
@@ -413,6 +414,121 @@ async def test_proxy_responses_stream_tool_call_continuation(tmp_path: Path) -> 
         ],
     }
     assert payload["messages"][-1]["role"] == "tool"
+    assert payload["messages"][-1]["tool_call_id"] == "call-1"
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_remembers_before_final_event_is_yielded() -> None:
+    async def chunks():
+        yield {"choices": [{"delta": {"content": "hello"}, "index": 0}]}
+
+    remembered: list[dict[str, object]] = []
+    stream = aopenai_chunks_to_responses_sse(
+        chunks(), model="test", on_complete=lambda message: remembered.append(message)
+    )
+    async for event in stream:
+        if "event: response.completed" in event:
+            break
+    await stream.aclose()
+    assert remembered == [{"role": "assistant", "content": "hello"}]
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_empty_turn_has_empty_content_in_memory() -> None:
+    async def chunks():
+        if False:
+            yield {}
+
+    remembered: list[dict[str, object]] = []
+    async for _ in aopenai_chunks_to_responses_sse(
+        chunks(), model="test", on_complete=lambda message: remembered.append(message)
+    ):
+        pass
+    assert remembered == [{"role": "assistant", "content": ""}]
+
+
+@pytest.mark.asyncio
+async def test_responses_stream_tool_call_without_arguments_stores_empty_object() -> None:
+    async def chunks():
+        yield {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call-empty",
+                                "type": "function",
+                                "function": {"name": "ping"},
+                            }
+                        ]
+                    },
+                    "index": 0,
+                }
+            ]
+        }
+
+    remembered: list[dict[str, object]] = []
+    async for _ in aopenai_chunks_to_responses_sse(
+        chunks(), model="test", on_complete=lambda message: remembered.append(message)
+    ):
+        pass
+    assert remembered == [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-empty",
+                    "type": "function",
+                    "function": {"name": "ping", "arguments": "{}"},
+                }
+            ],
+        }
+    ]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_proxy_responses_stream_failure_does_not_remember_turn(tmp_path: Path) -> None:
+    mock_models()
+    error_stream = 'data: {"error":{"message":"upstream broke"}}\n\ndata: [DONE]\n\n'
+    mock_completions(
+        {
+            FREE_A: [
+                httpx.Response(
+                    200,
+                    content=error_stream.encode(),
+                    headers={"content-type": "text/event-stream"},
+                ),
+                httpx.Response(200, json=completion_payload(FREE_A, "continued")),
+            ],
+            FREE_B: httpx.Response(
+                200, content=error_stream.encode(), headers={"content-type": "text/event-stream"}
+            ),
+        }
+    )
+    app = create_app(make_client(tmp_path))
+    async with _http(app) as client:
+        async with client.stream(
+            "POST", "/v1/responses", json={"model": "freewhirr", "input": "start", "stream": True}
+        ) as first:
+            first_text = "".join([part async for part in first.aiter_text()])
+        failed_id = json.loads(
+            next(line[6:] for line in first_text.splitlines() if line.startswith("data: "))
+        )["response"]["id"]
+        followup = await client.post(
+            "/v1/responses",
+            json={
+                "model": "freewhirr",
+                "previous_response_id": failed_id,
+                "input": "continue",
+            },
+        )
+    assert "event: response.failed" in first_text
+    assert followup.status_code == 200
+    messages = json.loads(_last_completion_request().read())["messages"]
+    assert all(message["role"] != "assistant" for message in messages)
 
 
 @respx.mock
