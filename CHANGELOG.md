@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fail over when a reply has no text, tool call or refusal, including streamed replies (`reject_empty_responses`, on by default).
 - Gate caller-requested models through free-model eligibility and prevent requests from adding paid fallbacks.
 - Filter discovered free models with non-text outputs or router tokenizers, and add `exclude_models`.
 - Add opt-in `strong_free_models` ordering for per-request low/high complexity tags.
