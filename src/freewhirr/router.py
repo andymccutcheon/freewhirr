@@ -23,6 +23,7 @@ from freewhirr.errors import (
 )
 from freewhirr.models import ModelCatalog, merge_model_lists, parse_model
 from freewhirr.quality import (
+    NonEmptyResponseCheck,
     QualityCheck,
     ToolCallCheck,
     compose_quality_checks,
@@ -75,6 +76,7 @@ def _discovered_ineligibility_reason(info: ModelInfo) -> str | None:
     if architecture.get("tokenizer") == "Router":
         return "tokenizer is Router"
     return None
+
 
 
 class Completions:
@@ -952,7 +954,8 @@ class Freewhirr:
         tool_check = None
         if self.config.validate_tool_calls and request_uses_tools(params, extra_body):
             tool_check = ToolCallCheck(extract_tool_names(params, extra_body))
-        return compose_quality_checks(quality, tool_check)
+        empty_check = NonEmptyResponseCheck() if self.config.reject_empty_responses else None
+        return compose_quality_checks(quality, tool_check, empty_check)
 
     def _allow_tools(
         self,

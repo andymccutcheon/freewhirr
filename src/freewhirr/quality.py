@@ -25,6 +25,25 @@ class MinLengthCheck:
         return len(extract_message_content(payload)) >= self.minimum
 
 
+class NonEmptyResponseCheck:
+    """Reject replies with no text and no tool or function call.
+
+    Reasoning models can spend the whole token budget thinking and return an
+    empty ``content``. A reply that carries a tool call is valid without text.
+    """
+
+    def __call__(self, payload: dict[str, Any]) -> bool:
+        choices = payload.get("choices") or []
+        if not choices:
+            return True
+        message = (choices[0] or {}).get("message") or {}
+        if message.get("tool_calls") or message.get("function_call"):
+            return True
+        if str(message.get("refusal") or "").strip():
+            return True
+        return bool(extract_message_content(payload).strip())
+
+
 class JsonSchemaCheck:
     """Parse the assistant message as JSON and validate it against a schema."""
 
@@ -122,6 +141,7 @@ class AllChecks:
 
 _BUILTIN_CHECKS = (
     MinLengthCheck,
+    NonEmptyResponseCheck,
     JsonSchemaCheck,
     CallableCheck,
     ToolCallCheck,
