@@ -78,7 +78,6 @@ def _discovered_ineligibility_reason(info: ModelInfo) -> str | None:
     return None
 
 
-
 class Completions:
     def __init__(self, router: Freewhirr) -> None:
         self._router = router
@@ -559,17 +558,36 @@ class Freewhirr:
             raise self._as_failover(model_id, exc) from exc
 
         assembled = _StreamAssembler()
+        guard = self.config.reject_empty_responses
+        pending: list[dict[str, Any]] = []
+        released = not guard
         assembled.ingest(first)
         first.setdefault("model", model_id)
-        yield first
+        if released or _chunk_is_meaningful(first):
+            released = True
+            yield first
+        else:
+            pending.append(first)
         try:
             for chunk in iterator:
                 assembled.ingest(chunk)
                 chunk.setdefault("model", model_id)
-                yield chunk
-        except Exception:
-            # Tokens already reached the caller; do not silently fail over.
-            raise
+                if released:
+                    yield chunk
+                    continue
+                pending.append(chunk)
+                if _chunk_is_meaningful(chunk):
+                    released = True
+                    yield from pending
+                    pending.clear()
+        except Exception as exc:
+            if released:
+                # Tokens already reached the caller; do not silently fail over.
+                raise
+            self._note_stream_failure(model_id, exc, attempts, t0)
+            raise self._as_failover(model_id, exc) from exc
+        if not released:
+            raise self._empty_stream_failover(model_id, attempts)
 
         attempts.append(
             Attempt(
@@ -621,16 +639,37 @@ class Freewhirr:
             raise self._as_failover(model_id, exc) from exc
 
         assembled = _StreamAssembler()
+        guard = self.config.reject_empty_responses
+        pending: list[dict[str, Any]] = []
+        released = not guard
         assembled.ingest(first)
         first.setdefault("model", model_id)
-        yield first
+        if released or _chunk_is_meaningful(first):
+            released = True
+            yield first
+        else:
+            pending.append(first)
         try:
             async for chunk in iterator:
                 assembled.ingest(chunk)
                 chunk.setdefault("model", model_id)
-                yield chunk
-        except Exception:
-            raise
+                if released:
+                    yield chunk
+                    continue
+                pending.append(chunk)
+                if _chunk_is_meaningful(chunk):
+                    released = True
+                    for held in pending:
+                        yield held
+                    pending.clear()
+        except Exception as exc:
+            if released:
+                # Tokens already reached the caller; do not silently fail over.
+                raise
+            self._note_stream_failure(model_id, exc, attempts, t0)
+            raise self._as_failover(model_id, exc) from exc
+        if not released:
+            raise self._empty_stream_failover(model_id, attempts)
 
         attempts.append(
             Attempt(
@@ -650,6 +689,21 @@ class Freewhirr:
             messages=messages,
             prompt=prompt,
             params=params,
+        )
+
+    def _empty_stream_failover(self, model_id: str, attempts: list[Attempt]) -> FailoverError:
+        attempts.append(
+            Attempt(
+                model=model_id,
+                reason=FailReason.QUALITY.value,
+                message="stream ended with no text, tool call or refusal",
+            )
+        )
+        return FailoverError(
+            "Stream ended with an empty reply",
+            reason=FailReason.QUALITY.value,
+            model=model_id,
+            retryable=False,
         )
 
     def _complete_with_retries(
@@ -1195,6 +1249,21 @@ def _complexity_value(complexity: Complexity | str | None) -> str | None:
     if complexity is None:
         return None
     return complexity.value if isinstance(complexity, Complexity) else str(complexity)
+
+
+def _chunk_is_meaningful(chunk: dict[str, Any]) -> bool:
+    """True when a stream chunk carries text, a tool/function call, or a refusal."""
+    for choice in chunk.get("choices") or []:
+        delta = (choice or {}).get("delta") or {}
+        content = delta.get("content")
+        if isinstance(content, str) and content.strip():
+            return True
+        if delta.get("tool_calls") or delta.get("function_call"):
+            return True
+        refusal = delta.get("refusal")
+        if isinstance(refusal, str) and refusal.strip():
+            return True
+    return False
 
 
 class _StreamAssembler:

@@ -1,4 +1,18 @@
+from __future__ import annotations
+
+import httpx
+import respx
+
 from freewhirr import NonEmptyResponseCheck
+
+from .conftest import (
+    FREE_A,
+    FREE_B,
+    completion_payload,
+    make_client,
+    mock_completions,
+    mock_models,
+)
 
 
 def _payload(content=None, **message):
@@ -25,12 +39,6 @@ def test_tool_call_without_text_is_valid():
 
 def test_refusal_is_valid():
     assert NonEmptyResponseCheck()(_payload("", refusal="I can't help with that"))
-
-
-import httpx
-import respx
-
-from tests.conftest import FREE_A, FREE_B, completion_payload, make_client, mock_completions, mock_models
 
 
 @respx.mock
