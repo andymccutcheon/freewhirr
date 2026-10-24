@@ -507,7 +507,11 @@ docs for `data_collection` and the related `zdr` (zero data retention) flag.
    validation, or any callable) and it rejects the response, treat that like a
    failover and try the next model. Malformed tool calls (invalid JSON
    arguments or an unknown tool name) fail the same way when
-   `validate_tool_calls` is on. Quality checks are skipped for streaming.
+   `validate_tool_calls` is on. A reply with no text, no tool call and no refusal
+   is also rejected unless `reject_empty_responses` is turned off. Other quality
+   checks are skipped for streaming; the empty-reply check holds streamed
+   chunks until the first text, tool call or refusal arrives, so an empty
+   stream can still fail over before anything is sent.
 4. When the free list is exhausted, apply the exhaustion policy.
 5. Streaming failovers only happen **before the first token**. After tokens
    have been sent to the caller, a mid-stream error is surfaced rather than

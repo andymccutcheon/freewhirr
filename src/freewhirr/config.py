@@ -58,6 +58,7 @@ class FreewhirrConfig(BaseModel):
     fetch_generation_cost: bool = False
     require_tool_support: bool = True
     validate_tool_calls: bool = True
+    reject_empty_responses: bool = True
     promote_stealth: bool = False
     watch_interval: float = 300.0
     alert_webhook: str | None = None
@@ -234,6 +235,10 @@ def env_overrides() -> dict[str, Any]:
         mapping["require_tool_support"] = _parse_bool(os.environ["FREEWHIRR_REQUIRE_TOOL_SUPPORT"])
     if os.environ.get("FREEWHIRR_VALIDATE_TOOL_CALLS"):
         mapping["validate_tool_calls"] = _parse_bool(os.environ["FREEWHIRR_VALIDATE_TOOL_CALLS"])
+    if os.environ.get("FREEWHIRR_REJECT_EMPTY_RESPONSES"):
+        mapping["reject_empty_responses"] = _parse_bool(
+            os.environ["FREEWHIRR_REJECT_EMPTY_RESPONSES"]
+        )
     if os.environ.get("FREEWHIRR_PROMOTE_STEALTH"):
         mapping["promote_stealth"] = _parse_bool(os.environ["FREEWHIRR_PROMOTE_STEALTH"])
     if os.environ.get("FREEWHIRR_WATCH_INTERVAL"):

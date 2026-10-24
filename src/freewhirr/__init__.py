@@ -16,6 +16,7 @@ from freewhirr.quality import (
     CallableCheck,
     JsonSchemaCheck,
     MinLengthCheck,
+    NonEmptyResponseCheck,
     QualityCheck,
     ToolCallCheck,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "FreewhirrError",
     "JsonSchemaCheck",
     "MinLengthCheck",
+    "NonEmptyResponseCheck",
     "OpenRouterError",
     "PaidFallbackExhausted",
     "QualityCheck",
